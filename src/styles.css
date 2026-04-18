@@ -1058,7 +1058,7 @@ body {
     gap: var(--espacamento);
   }
 
-  /* Controles → times → fila/partidas: melhor fluxo em tablet */
+  /* Controles → times → fila/partidas: melhor fluxo em larguras menores */
   .controls-panel {
     order: 1;
   }
@@ -1074,13 +1074,12 @@ body {
   .app-tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
   }
 
   .tab-btn {
     flex: 0 0 auto;
-    min-height: 44px;
+    min-height: 40px;
     padding: 12px 16px;
   }
 
@@ -1103,7 +1102,7 @@ body {
     width: 100%;
   }
 
-  /* Evita zoom automático no foco (iOS) */
+  /* Evita zoom automático no foco quando a fonte do campo é pequena */
   .input-text,
   .input-number,
   textarea {
@@ -1118,7 +1117,7 @@ body {
     max-height: min(36vh, 360px);
   }
 
-  /* Só times em campo: 2 colunas em tablet; próximos (sortable) seguem 1 coluna */
+  /* Só times em campo: 2 colunas em larguras menores; próximos (sortable) seguem 1 coluna */
   .teams-grid-in-field {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
@@ -1210,7 +1209,7 @@ body {
   .tab-btn {
     font-size: 0.85rem;
     padding: 10px 12px;
-    min-height: 44px;
+    min-height: 40px;
   }
 }
 

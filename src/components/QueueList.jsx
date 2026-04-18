@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
-  PointerSensor,
+  MouseSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -71,7 +71,7 @@ function SortablePlayerRow({
           <button
             type="button"
             className="btn btn-outline btn-sm"
-            onPointerDown={stopDrag}
+            onMouseDown={stopDrag}
             onClick={() => onEditPlayer(player)}
           >
             Editar
@@ -83,7 +83,7 @@ function SortablePlayerRow({
           <button
             type="button"
             className="btn btn-queue-injury btn-queue-icon"
-            onPointerDown={stopDrag}
+            onMouseDown={stopDrag}
             onClick={() => onRemove(player.id, 'injured', false)}
             title="Lesão — marcar como lesionado"
             aria-label="Lesão — marcar como lesionado"
@@ -93,7 +93,7 @@ function SortablePlayerRow({
           <button
             type="button"
             className="btn btn-queue-tired btn-queue-icon"
-            onPointerDown={stopDrag}
+            onMouseDown={stopDrag}
             onClick={() => onRemove(player.id, 'tired', false)}
             title="Cansado — marcar como cansado"
             aria-label="Cansado — marcar como cansado"
@@ -103,7 +103,7 @@ function SortablePlayerRow({
           <button
             type="button"
             className="btn btn-queue-sub btn-queue-icon"
-            onPointerDown={stopDrag}
+            onMouseDown={stopDrag}
             onClick={() => onRemove(player.id, 'tired', true)}
             title="Substituir — próximo da fila"
             aria-label="Substituir — próximo da fila"
@@ -117,7 +117,7 @@ function SortablePlayerRow({
           <button
             type="button"
             className="btn btn-queue-injury btn-queue-icon"
-            onPointerDown={stopDrag}
+            onMouseDown={stopDrag}
             onClick={() => onRemove(player.id, 'injured', false)}
             title="Lesão — marcar como lesionado (fora de campo)"
             aria-label="Lesão — marcar como lesionado (fora de campo)"
@@ -127,7 +127,7 @@ function SortablePlayerRow({
           <button
             type="button"
             className="btn btn-queue-tired btn-queue-icon"
-            onPointerDown={stopDrag}
+            onMouseDown={stopDrag}
             onClick={() => onRemove(player.id, 'tired', false)}
             title="Cansado — marcar como cansado (fora de campo)"
             aria-label="Cansado — marcar como cansado (fora de campo)"
@@ -141,7 +141,7 @@ function SortablePlayerRow({
           <button
             type="button"
             className="btn btn-outline btn-sm btn-queue-restore"
-            onPointerDown={stopDrag}
+            onMouseDown={stopDrag}
             onClick={() => onRestore(player.id)}
             title={
               player.status === 'tired'
@@ -199,7 +199,7 @@ export default function QueueList({
     tired: 'status-tired',
   };
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }));
 
   const itemIds = useMemo(() => players.map((p) => p.id), [players]);
 
@@ -237,7 +237,7 @@ export default function QueueList({
       <h2>Fila de Jogadores ({players.length})</h2>
       {onReorderLinePlayers && players.some((p) => p.status === 'available') && (
         <p className="queue-drag-hint">
-          Arraste o card do jogador (inteiro) para repriorizar quem está disponível.
+          Arraste o card do jogador (inteiro) com o mouse para repriorizar quem está disponível.
         </p>
       )}
       {players.length === 0 ? (

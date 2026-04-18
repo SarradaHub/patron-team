@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
-  PointerSensor,
+  MouseSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -51,7 +51,7 @@ export default function WaitingTeamsSortableList({
 }) {
   const itemIds = useMemo(() => teams.map((t) => t.id), [teams]);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 8 } }));
 
   const handleDragEnd = (event) => {
     if (!onReorderWaitingTeams) return;
@@ -78,7 +78,7 @@ export default function WaitingTeamsSortableList({
             label={teamLabelById[team.id] || 'Time'}
             waitingQueueIndex={waitingQueueIndexByTeamId[team.id]}
             onEditTeam={onEditTeam}
-            stopPointerPropagationOnActions
+            stopMousePropagationOnActions
           />
         </SortableTeamShell>
       ))}
@@ -89,7 +89,7 @@ export default function WaitingTeamsSortableList({
     <>
       {onReorderWaitingTeams && (
         <p className="teams-drag-hint">
-          Arraste o card inteiro para mudar a ordem dos próximos.
+          Arraste o card inteiro com o mouse para mudar a ordem dos próximos.
         </p>
       )}
       {onReorderWaitingTeams ? (
