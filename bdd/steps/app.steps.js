@@ -11,7 +11,7 @@ Then('authentication should be resolved for current environment', async function
   if (loginVisible) {
     await expect(this.page.locator(appSelectors.login.submit)).toBeVisible();
   } else {
-    await expect(this.page.getByRole('heading', { name: 'Arjen — Fila de times' })).toBeVisible();
+    await expect(this.page.getByTestId('tab-queue')).toBeVisible();
   }
 });
 
@@ -25,7 +25,7 @@ Given('I am authenticated in app', async function () {
     await this.page.fill(appSelectors.login.password, pass);
     await this.page.click(appSelectors.login.submit);
   }
-  await expect(this.page.getByRole('heading', { name: 'Arjen — Fila de times' })).toBeVisible();
+  await expect(this.page.getByTestId('tab-queue')).toBeVisible();
 });
 
 When('I add player {string}', async function (playerName) {

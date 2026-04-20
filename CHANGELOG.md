@@ -22,7 +22,7 @@ Todas as mudanças relevantes do projeto são documentadas aqui.
 ### Adicionado
 - **Módulo de Estatísticas de Jogadores** — Nova aba "📊 Estatísticas" na UI
   - Tabela com todos os jogadores mostrando gols, assistências e total
-  - Botões +/− para registrar/corrigir gols e assistências
+  - Botões +/- para registrar/corrigir gols e assistências
   - Filtro por nome de jogador
   - Ordenação por nome, gols, assistências ou total (clique nos cabeçalhos)
   - Resumo geral com totais de jogadores, gols, assistências e participações

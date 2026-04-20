@@ -12,7 +12,6 @@ import React from 'react';
  * @param {function} [props.onEditTeam] - (team, defaultLabel) abre edição de rótulo
  * @param {number} [props.waitingQueueIndex] - posição na fila “próximos” (1-based), alinhada à ordem global
  * @param {Record<string, number>} [props.playerFilaNumberById] - # na fila de jogadores (mesma ordem que QueueList, sem só-goleiro)
- * @param {boolean} [props.stopMousePropagationOnActions] - evita iniciar DnD ao clicar nos botões (cards sortable)
  */
 export default function TeamCard({
   team,
@@ -22,19 +21,12 @@ export default function TeamCard({
   onEditTeam,
   waitingQueueIndex,
   playerFilaNumberById = {},
-  stopMousePropagationOnActions = false,
 }) {
   // Cria um mapa de jogadores por ID para acesso rápido
   const playerMap = {};
   for (const p of allPlayers) {
     playerMap[p.id] = p;
   }
-
-  const stopAct = stopMousePropagationOnActions
-    ? (e) => {
-        e.stopPropagation();
-      }
-    : undefined;
 
   const playerIdsOrdered =
     team.status === 'waiting'
@@ -98,7 +90,6 @@ export default function TeamCard({
           <button
             type="button"
             className="btn btn-outline btn-sm team-edit-btn"
-            onMouseDown={stopAct}
             onClick={() => onEditTeam(team, label || 'Time')}
           >
             Editar
@@ -108,7 +99,6 @@ export default function TeamCard({
           <button
             type="button"
             className="btn btn-outline btn-sm team-block-btn"
-            onMouseDown={stopAct}
             onClick={() => onToggleBlock(team.id)}
           >
             {team.isBlocked ? 'Desbloquear time' : 'Bloquear time'}

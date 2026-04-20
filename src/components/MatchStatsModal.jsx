@@ -20,7 +20,7 @@ function StatStepper({ label, value, onDecrement, onIncrement }) {
         onClick={onDecrement}
         disabled={(Number(value) || 0) <= 0}
       >
-        --
+        -
       </button>
       <span className="stats-value match-stats-stepper-value">{Number(value) || 0}</span>
       <button
@@ -30,7 +30,7 @@ function StatStepper({ label, value, onDecrement, onIncrement }) {
         title={`Aumentar ${label}`}
         onClick={onIncrement}
       >
-        ++
+        +
       </button>
     </div>
   );
