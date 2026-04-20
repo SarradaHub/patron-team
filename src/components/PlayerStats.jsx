@@ -232,7 +232,7 @@ export default function PlayerStats({
                           aria-label="Remover gol"
                           disabled={(player.goals || 0) === 0}
                         >
-                          --
+                          -
                         </button>
                         <span className="stats-action-label">⚽</span>
                         <button
@@ -241,7 +241,7 @@ export default function PlayerStats({
                           title="Registrar gol"
                           aria-label="Registrar gol"
                         >
-                          ++
+                          +
                         </button>
                       </div>
                       <div className="stats-action-group">
@@ -252,7 +252,7 @@ export default function PlayerStats({
                           aria-label="Remover assistência"
                           disabled={(player.assists || 0) === 0}
                         >
-                          --
+                          -
                         </button>
                         <span className="stats-action-label">👟</span>
                         <button
@@ -261,7 +261,7 @@ export default function PlayerStats({
                           title="Registrar assistência"
                           aria-label="Registrar assistência"
                         >
-                          ++
+                          +
                         </button>
                       </div>
                     </td>

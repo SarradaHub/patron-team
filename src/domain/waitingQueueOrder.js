@@ -2,7 +2,7 @@
  * Ordem da fila de times `waiting`:
  * 1) Times com elenco completo (players.length >= rosterTargetSize) antes dos incompletos,
  *    quando rosterTargetSize é informado (ex.: mesmo “Jogadores por time” da UI).
- * 2) Entre o mesmo grupo: waitingOrder (menor primeiro; arrastar na UI grava 1..n).
+ * 2) Entre o mesmo grupo: waitingOrder (menor primeiro; ordem manual persistida 1..n quando aplicável).
  * 3) Desempate: menor joinedAt no elenco (cabeça da fila global), enteredWaitingAt, id.
  */
 

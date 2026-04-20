@@ -88,7 +88,7 @@ Para jogadores em campo:
 ### 7. Estatísticas de jogadores (⚽ Gols & 👟 Assistências)
 Clique na aba **📊 Estatísticas** no topo da aplicação para acessar o módulo de estatísticas. Neste painel você pode:
 - Ver todos os jogadores com seus gols, assistências e total de participações
-- Usar os botões **+** e **−** ao lado de cada jogador para registrar/corrigir gols e assistências
+- Usar os botões **+** e **-** ao lado de cada jogador para registrar/corrigir gols e assistências
 - Filtrar jogadores pelo nome usando o campo de busca
 - Ordenar por nome, gols, assistências ou total clicando nos cabeçalhos das colunas
 - Acompanhar o resumo geral (total de jogadores, gols, assistências e participações) no topo
@@ -219,10 +219,10 @@ vercel
 - [x] ~~Estatísticas de gols e assistências por jogador~~
 - [x] ~~Modo escuro~~ (`data-theme`, `src/theme.js`, `src/components/ThemeToggle.jsx`)
 - [x] ~~Timer de partida integrado~~ (countdown persistido: `timerDurationMinutes`, `countdownEndsAt` em `indexeddb.js`)
-- [x] ~~Drag & drop para reordenar fila manualmente~~ (jogadores **disponíveis**; `@dnd-kit`; `reorderLinePlayersInQueueOrder`)
+- [x] ~~Reordenação manual da fila de jogadores disponíveis~~ (persistida via `reorderLinePlayersInQueueOrder` na API IndexedDB; sem UI dedicada)
 - [x] ~~Estatísticas de vitórias/derrotas por jogador~~ (aba da rodada + globais com V/E/D)
 - [x] ~~Garbage collector mantendo lista e stats~~ (manutenção em Controles)
-- [x] ~~Botões ++ e -- nos gols e assistências~~ (rótulos nos botões; modal de stats e aba global)
+- [x] ~~Botões + e - nos gols e assistências~~ (rótulos nos botões; modal de stats e aba global)
 - [x] ~~Lista separada de goleiro~~
 - [x] ~~Fila de times em espera: FIFO + desempate por data (`enteredWaitingAt` / `createdAt`)~~ — ver `src/domain/waitingQueueOrder.js`
 - [ ] Ordenação da fila de times **só** por data — toggle ou vista alternativa na UI (opcional)
@@ -230,7 +230,6 @@ vercel
 ## Tecnologias
 
 - **React 18** + **Vite** — Framework e bundler
-- **@dnd-kit** — Arrastar e soltar na fila de jogadores (disponíveis)
 - **IndexedDB** — Banco de dados local (sem dependências externas)
 - **BroadcastChannel API** — Sincronização entre abas
 - **Service Worker** — Cache offline (PWA)

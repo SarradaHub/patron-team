@@ -140,22 +140,23 @@ body {
   flex-direction: column;
 }
 
-.app-header {
-  text-align: center;
-  padding: 20px var(--espacamento);
-  background: linear-gradient(135deg, var(--cor-primaria), var(--cor-primaria-clara));
-  color: white;
-  border-radius: var(--raio-borda);
+.app-top-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   margin-bottom: var(--espacamento);
 }
 
-.app-header h1 {
-  font-size: 1.8rem;
+.app-top-bar .btn-theme-toggle {
+  background: var(--cor-surface-muted);
+  color: var(--cor-texto);
+  border: 1px solid var(--cor-borda);
 }
 
-.app-header p {
-  opacity: 0.9;
-  font-size: 0.95rem;
+.app-top-bar .btn-theme-toggle:hover {
+  background: var(--cor-surface-hover);
+  box-shadow: var(--sombra);
 }
 
 .app-main {
@@ -255,6 +256,10 @@ body {
 
 .unavailable-stat-tired strong {
   color: var(--cor-aviso);
+}
+
+.unavailable-stat-without-team strong {
+  color: var(--cor-info);
 }
 
 .unavailable-stat-total strong {
@@ -451,12 +456,6 @@ body {
   min-width: 0;
 }
 
-.queue-drag-hint {
-  margin: 0 0 10px;
-  font-size: 0.88rem;
-  color: var(--cor-texto-secundario);
-}
-
 .player-list {
   list-style: none;
   max-height: 60vh;
@@ -503,18 +502,6 @@ body {
   border-left-color: var(--cor-aviso);
   background-color: var(--cor-tint-warning);
   opacity: 0.7;
-}
-
-.player-item-dragging {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
-.player-item-draggable {
-  cursor: grab;
-}
-
-.player-item-draggable:active {
-  cursor: grabbing;
 }
 
 .player-position {
@@ -598,24 +585,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.teams-drag-hint {
-  margin: 0 0 10px;
-  font-size: 0.88rem;
-  color: var(--cor-texto-secundario);
-}
-
-.team-card-sortable-wrap {
-  cursor: grab;
-}
-
-.team-card-sortable-wrap:active {
-  cursor: grabbing;
-}
-
-.team-card-sortable-dragging .team-card {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .team-card {
@@ -1129,37 +1098,6 @@ body {
   }
 }
 
-@media (max-width: 768px) {
-  .app-header-top h1 {
-    font-size: 1.45rem;
-  }
-
-  .btn-theme-toggle-header {
-    position: static;
-    transform: none;
-    order: 2;
-  }
-
-  .btn-logout {
-    position: static;
-    transform: none;
-    margin-left: auto;
-    order: 3;
-  }
-
-  .app-header-top {
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: center;
-  }
-
-  .app-header-top h1 {
-    width: 100%;
-    order: 1;
-    margin-bottom: 0;
-  }
-}
-
 @media (max-width: 640px) {
   .app-main {
     display: flex;
@@ -1171,10 +1109,6 @@ body {
     padding-left: max(12px, env(safe-area-inset-left, 0px));
     padding-right: max(12px, env(safe-area-inset-right, 0px));
     padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
-  }
-
-  .app-header h1 {
-    font-size: 1.3rem;
   }
 
   .match-buttons {
@@ -1367,13 +1301,6 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-.btn-theme-toggle-header {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
 .login-theme-toggle {
   position: fixed;
   top: max(12px, env(safe-area-inset-top, 0px));
@@ -1526,39 +1453,6 @@ body {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-}
-
-/* ---------- Header com botão Sair ---------- */
-.app-header-top {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-}
-
-.app-header-top h1 {
-  font-size: 1.8rem;
-  margin-bottom: 4px;
-}
-
-.btn-logout {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  padding: 6px 14px;
-  font-size: 0.85rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-logout:hover {
-  background: rgba(255, 255, 255, 0.35);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 @media (max-width: 640px) {

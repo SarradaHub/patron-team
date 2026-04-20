@@ -35,8 +35,6 @@ import {
   getMatchScoresForRound,
   listPreWaitingTeamIds,
   runDatastoreMaintenance,
-  reorderLinePlayersInQueueOrder,
-  reorderWaitingTeamsInRound,
   setScheduledMatchTimerDuration,
   startScheduledMatchCountdown,
   clearScheduledMatchCountdown,
@@ -44,7 +42,7 @@ import {
 import { sortWaitingTeamsForRound } from './domain/waitingQueueOrder.js';
 import { buildTeamLabelById, labelMatchSide } from './domain/teamLabels.js';
 import QueueList from './components/QueueList.jsx';
-import WaitingTeamsSortableList from './components/WaitingTeamsSortableList.jsx';
+import WaitingTeamsList from './components/WaitingTeamsList.jsx';
 import GoalkeeperQueuePanel from './components/GoalkeeperQueuePanel.jsx';
 import TeamCard from './components/TeamCard.jsx';
 import MatchHistory from './components/MatchHistory.jsx';
@@ -384,27 +382,6 @@ export default function App() {
     }
   };
 
-  const handleReorderLinePlayers = async (orderedIds) => {
-    try {
-      await reorderLinePlayersInQueueOrder(orderedIds);
-      toast.success('Ordem da fila atualizada.');
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message || 'Não foi possível reordenar a fila.');
-    }
-  };
-
-  const handleReorderWaitingTeams = async (orderedTeamIds) => {
-    if (!activeRoundId) return;
-    try {
-      await reorderWaitingTeamsInRound(activeRoundId, orderedTeamIds);
-      toast.success('Ordem dos próximos times atualizada.');
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message || 'Não foi possível reordenar os times.');
-    }
-  };
-
   const handleSaveTeam = async (teamId, { displayName, playerIds }) => {
     try {
       await updateTeamDisplayName(teamId, displayName);
@@ -684,6 +661,23 @@ export default function App() {
     return { injured, tired, total: injured + tired };
   }, [players]);
 
+  const linePlayersWithoutTeam = useMemo(() => {
+    if (!activeRoundId) return 0;
+    const onRoster = new Set();
+    for (const t of teams) {
+      if (t.roundId !== activeRoundId) continue;
+      if (t.status !== 'in_field' && t.status !== 'waiting') continue;
+      for (const pid of t.players || []) onRoster.add(pid);
+    }
+    let n = 0;
+    for (const p of players) {
+      if (p.goalkeeperOnly) continue;
+      if (p.status === 'injured' || p.status === 'tired') continue;
+      if (!onRoster.has(p.id)) n += 1;
+    }
+    return n;
+  }, [activeRoundId, teams, players]);
+
   const runningCountdowns = matches.filter(
     (m) => m.status === 'scheduled' && m.countdownEndsAt
   );
@@ -704,16 +698,12 @@ export default function App() {
     <div className="app-container">
       <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
 
-      <header className="app-header">
-        <div className="app-header-top">
-          <ThemeToggle className="btn-theme-toggle-header" />
-          <h1>Arjen — Fila de times</h1>
-          <button className="btn btn-logout" onClick={handleLogout} title="Sair" type="button">
-            Sair
-          </button>
-        </div>
-        <p>Gerenciador de fila de peladeiros (partidas e stats locais)</p>
-      </header>
+      <div className="app-top-bar">
+        <ThemeToggle />
+        <button className="btn btn-outline btn-sm" onClick={handleLogout} title="Sair" type="button">
+          Sair
+        </button>
+      </div>
 
       <RoundSelector
         rounds={rounds}
@@ -795,6 +785,19 @@ export default function App() {
                 <span className="unavailable-sep" aria-hidden>
                   ·
                 </span>
+                <span
+                  className="unavailable-stat-without-team"
+                  title={
+                    activeRoundId
+                      ? 'Jogadores de linha disponíveis (não lesionados/cansados, não só-goleiro) sem time em campo ou na fila de espera desta rodada'
+                      : 'Selecione uma rodada'
+                  }
+                >
+                  <strong>{linePlayersWithoutTeam}</strong> sem time
+                </span>
+                <span className="unavailable-sep" aria-hidden>
+                  ·
+                </span>
                 <span className="unavailable-stat-total">
                   <strong>{unavailableSummary.total}</strong> fora da fila
                 </span>
@@ -815,7 +818,6 @@ export default function App() {
               onRestore={handleRestorePlayer}
               onEditPlayer={(p) => setEditPlayer(p)}
               waitingTeams={fifoWaitingTeams}
-              onReorderLinePlayers={handleReorderLinePlayers}
             />
             <GoalkeeperQueuePanel players={players} onDeletePlayer={handleGoalkeeperPanelDelete} />
           </div>
@@ -844,7 +846,7 @@ export default function App() {
             </div>
             <div className="panel teams-panel teams-waiting-panel" data-testid="teams-waiting-panel">
               <h2>Próximos na fila ({fifoWaitingTeams.length})</h2>
-              <WaitingTeamsSortableList
+              <WaitingTeamsList
                 teams={fifoWaitingTeams}
                 allPlayers={players}
                 teamLabelById={teamLabelById}
@@ -854,11 +856,6 @@ export default function App() {
                   setEditTeam(t);
                   setEditTeamDefaultLabel(lbl);
                 }}
-                onReorderWaitingTeams={
-                  activeRoundId && fifoWaitingTeams.length > 0
-                    ? handleReorderWaitingTeams
-                    : undefined
-                }
               />
             </div>
           </div>
