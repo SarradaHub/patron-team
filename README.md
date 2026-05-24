@@ -17,7 +17,7 @@ O **Arjen Queue** é uma aplicação React que funciona completamente offline, u
 - 🏆 **Registro de partidas** — Vitória, derrota ou empate com regras automáticas na rodada
 - 📊 **Estatísticas** — Aba **globais** (`players.goals` / `assists`) e aba **da rodada** (somente `player_stats` das partidas finalizadas; alinhado conceitualmente ao SLF)
 - 🔒 **Times bloqueados** — Excluídos do rebalanceamento MVP e da sugestão simples
-- 💾 **Export/Import** — Backup JSON `schemaVersion: 3` (`rounds`, `meta`, `player_stats`)
+- 💾 **Export/Import** — Export envia snapshot `schemaVersion: 3` para Supabase; import local via JSON
 - 📡 **Sincronização entre abas** — Via BroadcastChannel
 - 📱 **PWA Offline** — Funciona sem internet após primeiro carregamento
 - 🚀 **Deploy no GitHub Pages** — Workflow automático via GitHub Actions
@@ -96,9 +96,31 @@ Clique na aba **📊 Estatísticas** no topo da aplicação para acessar o módu
 ### 8. Estatísticas da rodada
 A terceira aba agrega vitórias/empates/derrotas e números por partida a partir de `player_stats` (não usa os totais globais da segunda aba).
 
-### 9. Backup e restore
-- **📤 Exportar** — Baixa um arquivo JSON com todos os dados (incluindo gols e assistências)
-- **📥 Importar** — Carrega um arquivo JSON substituindo todos os dados
+### 9. Nuvem e restore
+- **Enviar para nuvem** — Lê IndexedDB e envia snapshot para Supabase (Edge Function `export-snapshot`)
+- **📥 Importar** — Carrega um arquivo JSON substituindo todos os dados locais
+- **Limpar cache local** — Apaga IndexedDB e preferências de cronômetro no navegador; não remove dados no Supabase
+
+#### Variáveis de ambiente (Supabase)
+
+No Vercel (ou `.env.local` em desenvolvimento):
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua-chave-anon
+```
+
+Veja [`.env.example`](.env.example). O Vite expõe `VITE_*` e `NEXT_PUBLIC_*` via `envPrefix`.
+
+#### Migração e deploy da Edge Function
+
+```bash
+supabase link --project-ref <seu-project-ref>
+supabase db push
+supabase functions deploy export-snapshot
+```
+
+Tabelas: `export_batches`, `export_players`, `export_teams`, `export_matches`, `export_rounds`, `export_meta`, `export_player_stats` (RLS ativo; escrita só via função com service role).
 
 ## Dataset de Exemplo
 
@@ -201,20 +223,19 @@ vercel
 
 ### Export/Import
 1. Adicione jogadores e forme times
-2. Clique em **📤 Exportar** e salve o arquivo
-3. Limpe os dados (ou abra em outro navegador)
-4. Clique em **📥 Importar** e selecione o arquivo salvo
+2. Clique em **Enviar para nuvem** e confirme o toast de sucesso (verifique no painel Supabase)
+3. Para restore local: use **Importar** com um arquivo JSON de backup anterior
 
 ## Limitações
 
 - IndexedDB tem limite de armazenamento variável por navegador (~50MB-unlimited)
 - BroadcastChannel não funciona entre navegadores diferentes, apenas entre abas do mesmo
 - PWA requer HTTPS em produção (localhost funciona para desenvolvimento)
-- Não há sincronização remota (cloud) — dados ficam apenas no navegador local
+- Export para nuvem é append-only (snapshots); restore completo ainda é via import JSON local
 
 ## Próximos Passos
 
-- [ ] Sincronização em nuvem (Firebase/Supabase)
+- [x] ~~Sincronização em nuvem (export Supabase)~~
 - [ ] Notificações push quando é hora de jogar
 - [x] ~~Estatísticas de gols e assistências por jogador~~
 - [x] ~~Modo escuro~~ (`data-theme`, `src/theme.js`, `src/components/ThemeToggle.jsx`)
@@ -235,6 +256,7 @@ vercel
 - **Service Worker** — Cache offline (PWA)
 - **Vitest** — Testes unitários
 - **react-hot-toast** — Notificações toast
+- **Supabase** — Export de snapshots via Edge Function
 
 ## Licença
 

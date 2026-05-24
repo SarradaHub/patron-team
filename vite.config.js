@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react';
 // No deploy via GH Pages, defina VITE_BASE_PATH='/nome-do-repo/' no workflow.
 // Em desenvolvimento local, usa '/' por padrão.
 export default defineConfig({
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   base: process.env.VITE_BASE_PATH || '/',
   plugins: [react()],
   build: {

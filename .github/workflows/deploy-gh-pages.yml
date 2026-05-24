@@ -45,6 +45,8 @@ jobs:
           # Define o base path para o GitHub Pages
           # Substitua 'patron-team' pelo nome do repositório se diferente
           VITE_BASE_PATH: /patron-team/
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v4

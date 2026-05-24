@@ -4,6 +4,10 @@ import {
   SCHEDULED_MATCH_TIMER_MIN_MINUTES,
 } from '../api/indexeddb.js';
 import { formatCountdownRemainingMs } from '../domain/countdownFormat.js';
+import ConfirmDialog from './ConfirmDialog.jsx';
+
+const CLEAR_CACHE_CONFIRM_MESSAGE =
+  'Apagar todos os dados locais (fila, times, partidas)? Não afeta a nuvem. Exporte antes se precisar do backup.';
 
 /**
  * Controles: jogadores, formar todos os times possíveis (limite N), sugestão de partida, backup.
@@ -16,6 +20,7 @@ export default function Controls({
   onScheduleSuggested,
   onExport,
   onImport,
+  onClearLocalCache,
   onRunMaintenance,
   activeRoundId,
   teamSize,
@@ -32,6 +37,7 @@ export default function Controls({
 }) {
   const [playerName, setPlayerName] = useState('');
   const [addAsGoalkeeperOnly, setAddAsGoalkeeperOnly] = useState(false);
+  const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
   const fileInputRef = useRef(null);
   const [minDraft, setMinDraft] = useState('10');
 
@@ -298,7 +304,7 @@ export default function Controls({
       </section>
 
       <section className="control-section">
-        <h3>Backup / Restore</h3>
+        <h3>Nuvem / Restore</h3>
         <div className="backup-buttons">
           <button
             type="button"
@@ -306,7 +312,7 @@ export default function Controls({
             className="btn btn-outline"
             data-testid="export-data-button"
           >
-            Exportar dados
+            Enviar para nuvem
           </button>
           <button
             type="button"
@@ -316,6 +322,14 @@ export default function Controls({
           >
             Importar dados
           </button>
+          <button
+            type="button"
+            onClick={() => setShowClearCacheConfirm(true)}
+            className="btn btn-outline"
+            data-testid="clear-local-cache-button"
+          >
+            Limpar cache local
+          </button>
           <input
             ref={fileInputRef}
             type="file"
@@ -324,6 +338,22 @@ export default function Controls({
             onChange={handleImportFile}
           />
         </div>
+        <p className="info-message subtle">
+          Remove dados do navegador (IndexedDB). Não apaga snapshots no Supabase.
+        </p>
+        {showClearCacheConfirm && (
+          <ConfirmDialog
+            title="Limpar cache local"
+            message={CLEAR_CACHE_CONFIRM_MESSAGE}
+            confirmLabel="Apagar dados locais"
+            cancelLabel="Cancelar"
+            onCancel={() => setShowClearCacheConfirm(false)}
+            onConfirm={() => {
+              setShowClearCacheConfirm(false);
+              onClearLocalCache?.();
+            }}
+          />
+        )}
       </section>
 
       <section className="control-section">

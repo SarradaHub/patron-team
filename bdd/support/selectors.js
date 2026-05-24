@@ -18,6 +18,7 @@ export const appSelectors = {
     scheduleSuggestedButton: '[data-testid="schedule-suggested-button"]',
     exportButton: '[data-testid="export-data-button"]',
     importButton: '[data-testid="import-data-button"]',
+    clearLocalCacheButton: '[data-testid="clear-local-cache-button"]',
   },
   round: {
     activePanel: '[data-testid="round-panel"]',
