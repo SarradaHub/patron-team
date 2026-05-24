@@ -39,6 +39,8 @@ import {
   startScheduledMatchCountdown,
   clearScheduledMatchCountdown,
 } from './api/indexeddb.js';
+import { exportToSupabase } from './api/cloudExport.js';
+import { clearLocalAppCache } from './api/localDataClear.js';
 import { sortWaitingTeamsForRound } from './domain/waitingQueueOrder.js';
 import { buildTeamLabelById, labelMatchSide } from './domain/teamLabels.js';
 import QueueList from './components/QueueList.jsx';
@@ -568,15 +570,14 @@ export default function App() {
   const handleExport = async () => {
     try {
       const data = await exportData();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `team-queue-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Dados exportados com sucesso!');
+      const result = await exportToSupabase(data);
+      if (result?.duplicate) {
+        toast.success('Exportação já registrada (idempotente).');
+      } else {
+        toast.success('Dados enviados para Supabase!');
+      }
     } catch (err) {
+      console.error('handleExport:', err);
       toast.error(`Erro ao exportar: ${err.message}`);
     }
   };
@@ -588,6 +589,20 @@ export default function App() {
       await refreshData();
     } catch (err) {
       toast.error(`Erro ao importar: ${err.message}`);
+    }
+  };
+
+  const handleClearLocalCache = async () => {
+    try {
+      await clearLocalAppCache();
+      setSuggestion(null);
+      setStatsModalMatch(null);
+      setTimerTargetMatchId(null);
+      await refreshData();
+      toast.success('Cache local limpo. Nova rodada criada.');
+    } catch (err) {
+      console.error('handleClearLocalCache:', err);
+      toast.error(`Erro ao limpar cache: ${err.message}`);
     }
   };
 
@@ -752,6 +767,7 @@ export default function App() {
             onScheduleSuggested={handleScheduleSuggested}
             onExport={handleExport}
             onImport={handleImport}
+            onClearLocalCache={handleClearLocalCache}
             onRunMaintenance={handleRunMaintenance}
             activeRoundId={activeRoundId}
             teamSize={teamSize}

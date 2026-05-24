@@ -1541,6 +1541,10 @@ body {
   padding: 20px;
 }
 
+.confirm-dialog {
+  max-width: 420px;
+}
+
 .match-stats-modal h3 {
   margin-bottom: 8px;
 }
