@@ -738,11 +738,21 @@ body {
 .match-line-finalize {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   gap: 8px;
   width: 100%;
   padding-top: 4px;
+}
+
+.match-line-finalize .btn-match {
+  flex: 1 1 calc(50% - 4px);
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.match-line-finalize .btn-draw {
+  flex-basis: 100%;
 }
 
 .match-item.result-a-win {

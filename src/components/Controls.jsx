@@ -10,14 +10,12 @@ const CLEAR_CACHE_CONFIRM_MESSAGE =
   'Apagar todos os dados locais (fila, times, partidas)? Não afeta a nuvem. Exporte antes se precisar do backup.';
 
 /**
- * Controles: jogadores, formar todos os times possíveis (limite N), sugestão de partida, backup.
+ * Controles: jogadores, formar todos os times possíveis (limite N), agendar próxima partida, backup.
  */
 export default function Controls({
   onAddPlayer,
   onFormTeam,
-  onSuggestNext,
-  suggestion,
-  onScheduleSuggested,
+  onScheduleNext,
   onExport,
   onImport,
   onClearLocalCache,
@@ -37,6 +35,7 @@ export default function Controls({
 }) {
   const [playerName, setPlayerName] = useState('');
   const [addAsGoalkeeperOnly, setAddAsGoalkeeperOnly] = useState(false);
+  const playerNameInputRef = useRef(null);
   const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
   const fileInputRef = useRef(null);
   const [minDraft, setMinDraft] = useState('10');
@@ -55,6 +54,7 @@ export default function Controls({
       onAddPlayer(playerName.trim(), { goalkeeperOnly: addAsGoalkeeperOnly });
       setPlayerName('');
       setAddAsGoalkeeperOnly(false);
+      playerNameInputRef.current?.focus();
     }
   };
 
@@ -109,6 +109,7 @@ export default function Controls({
           <input
             type="text"
             data-testid="add-player-input"
+            ref={playerNameInputRef}
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             placeholder="Nome do jogador..."
@@ -272,35 +273,19 @@ export default function Controls({
       </section>
 
       <section className="control-section">
-        <h3>Próxima partida (sugestão)</h3>
+        <h3>Próxima partida</h3>
+        <p className="info-message subtle">
+          Agenda os dois primeiros times em campo que não estão bloqueados.
+        </p>
         <button
           type="button"
-          className="btn btn-outline"
+          className="btn btn-primary"
           disabled={!canAct}
-          onClick={() => onSuggestNext()}
-          data-testid="suggest-match-button"
+          onClick={() => onScheduleNext()}
+          data-testid="schedule-next-button"
         >
-          Sugerir confronto
+          Agendar próxima partida
         </button>
-        {suggestion?.ok && (
-          <p className="info-message">
-            Dois primeiros times em campo (não bloqueados). Agende para registrar no histórico.
-          </p>
-        )}
-        {suggestion && !suggestion.ok && (
-          <p className="info-message warning-text">{suggestion.error}</p>
-        )}
-        {suggestion?.ok && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!canAct}
-            onClick={() => onScheduleSuggested()}
-            data-testid="schedule-suggested-button"
-          >
-            Agendar partida sugerida
-          </button>
-        )}
       </section>
 
       <section className="control-section">

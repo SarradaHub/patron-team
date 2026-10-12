@@ -18,10 +18,11 @@ import {
   updateTeamDisplayName,
   updateTeamRoster,
   updateScheduledMatchTeams,
-  cancelScheduledMatch,
   deleteMatch,
   deletePlayerPermanently,
   deleteTeam,
+  teamDeleteBlockedByMatch,
+  TEAM_IN_MATCH_DELETE_MESSAGE,
   exportData,
   importData,
   onChange,
@@ -83,7 +84,6 @@ export default function App() {
   const [roundStatsRows, setRoundStatsRows] = useState([]);
   const [globalStatsRows, setGlobalStatsRows] = useState([]);
   const [matchScores, setMatchScores] = useState({});
-  const [suggestion, setSuggestion] = useState(null);
   const [statsModalMatch, setStatsModalMatch] = useState(null);
   const [activeTab, setActiveTab] = useState('queue');
   const [teamSize, setTeamSize] = useState(5);
@@ -194,7 +194,6 @@ export default function App() {
   const handleSelectRound = async (roundId) => {
     try {
       await setActiveRoundId(roundId);
-      setSuggestion(null);
       await refreshData();
       toast.success('Rodada ativa alterada.');
     } catch (err) {
@@ -232,24 +231,16 @@ export default function App() {
     }
   };
 
-  const handleSuggestNext = async () => {
+  const handleScheduleNext = async () => {
     if (!activeRoundId) return;
     try {
       const s = await suggestNextMatchForRound(activeRoundId, teamSize);
-      setSuggestion(s);
-      if (s.ok) toast.success('Sugestão calculada.');
-      else toast.error(s.error);
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleScheduleSuggested = async () => {
-    if (!activeRoundId || !suggestion?.ok) return;
-    try {
-      await scheduleMatch(activeRoundId, suggestion.teamAId, suggestion.teamBId, { teamSize });
+      if (!s.ok) {
+        toast.error(s.error);
+        return;
+      }
+      await scheduleMatch(activeRoundId, s.teamAId, s.teamBId, { teamSize });
       toast.success('Partida agendada. Edite stats e finalize no histórico.');
-      setSuggestion(null);
       await refreshData();
     } catch (err) {
       toast.error(err.message);
@@ -416,17 +407,6 @@ export default function App() {
     }
   };
 
-  const handleCancelScheduledMatch = async (matchId) => {
-    try {
-      await cancelScheduledMatch(matchId);
-      toast.success('Partida cancelada.');
-      setEditMatch(null);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
   const handleDeletePlayerPermanent = async (playerId) => {
     if (
       !window.confirm(
@@ -480,6 +460,15 @@ export default function App() {
   };
 
   const handleDeleteTeam = async (teamId) => {
+    try {
+      if (await teamDeleteBlockedByMatch(teamId)) {
+        toast.error(TEAM_IN_MATCH_DELETE_MESSAGE);
+        return;
+      }
+    } catch (err) {
+      toast.error(err.message);
+      return;
+    }
     if (
       !window.confirm(
         'Excluir este time? Jogadores voltam só à fila (cadastro intacto). Não dá para desfazer.'
@@ -595,7 +584,6 @@ export default function App() {
   const handleClearLocalCache = async () => {
     try {
       await clearLocalAppCache();
-      setSuggestion(null);
       setStatsModalMatch(null);
       setTimerTargetMatchId(null);
       await refreshData();
@@ -762,9 +750,7 @@ export default function App() {
           <Controls
             onAddPlayer={handleAddPlayer}
             onFormTeam={handleFormTeam}
-            onSuggestNext={handleSuggestNext}
-            suggestion={suggestion}
-            onScheduleSuggested={handleScheduleSuggested}
+            onScheduleNext={handleScheduleNext}
             onExport={handleExport}
             onImport={handleImport}
             onClearLocalCache={handleClearLocalCache}
@@ -827,12 +813,17 @@ export default function App() {
               onEditStats={(m) => setStatsModalMatch(m)}
               onEditScheduledMatch={(m) => setEditMatch(m)}
               onDeleteMatch={handleDeleteMatch}
+              onFinalizeResult={(match, result) => {
+                if (result === 'draw') handleRequestDraw(match);
+                else handleFinalizeScheduled(match.id, result);
+              }}
             />
             <QueueList
               players={players.filter((p) => !p.goalkeeperOnly)}
               onRemove={handleRemovePlayer}
               onRestore={handleRestorePlayer}
               onEditPlayer={(p) => setEditPlayer(p)}
+              onDeletePlayer={handleDeletePlayerPermanent}
               waitingTeams={fifoWaitingTeams}
             />
             <GoalkeeperQueuePanel players={players} onDeletePlayer={handleGoalkeeperPanelDelete} />
@@ -855,6 +846,7 @@ export default function App() {
                         setEditTeam(t);
                         setEditTeamDefaultLabel(lbl);
                       }}
+                      onDeleteTeam={handleDeleteTeam}
                     />
                   ))}
                 </div>
@@ -872,6 +864,7 @@ export default function App() {
                   setEditTeam(t);
                   setEditTeamDefaultLabel(lbl);
                 }}
+                onDeleteTeam={handleDeleteTeam}
               />
             </div>
           </div>
@@ -956,7 +949,6 @@ export default function App() {
           teamSize={teamSize}
           onClose={() => setEditMatch(null)}
           onSave={handleSaveScheduledTeams}
-          onCancelMatch={handleCancelScheduledMatch}
         />
       )}
 

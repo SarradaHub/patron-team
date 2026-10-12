@@ -14,7 +14,6 @@ export default function EditScheduledMatchModal({
   teamSize,
   onClose,
   onSave,
-  onCancelMatch,
 }) {
   const optionTeams = useMemo(() => {
     const min = teamSize || 1;
@@ -51,22 +50,12 @@ export default function EditScheduledMatchModal({
     await onSave(match.id, teamAId, teamBId);
   };
 
-  const handleCancelMatchClick = async () => {
-    if (
-      window.confirm(
-        'Cancelar esta partida agendada? As stats em rascunho serão apagadas. Esta ação não pode ser desfeita.'
-      )
-    ) {
-      await onCancelMatch(match.id);
-    }
-  };
-
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-match-title">
       <div className="modal-content match-stats-modal">
         <h3 id="edit-match-title">Editar partida agendada</h3>
         <p className="modal-sub">
-          Troque os times (elenco mínimo: {teamSize} jogadores) ou cancele a partida.
+          Troque os times (elenco mínimo: {teamSize} jogadores). Para remover a partida, use Excluir no card.
         </p>
         <form onSubmit={handleSubmit}>
           {optionTeams.length < 2 && (
@@ -112,9 +101,6 @@ export default function EditScheduledMatchModal({
             </div>
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-outline btn-danger-outline" onClick={handleCancelMatchClick}>
-              Cancelar partida
-            </button>
             <button type="button" className="btn btn-outline" onClick={onClose}>
               Fechar
             </button>

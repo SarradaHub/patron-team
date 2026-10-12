@@ -1339,22 +1339,27 @@ export async function deletePlayerPermanently(playerId) {
   });
 }
 
+export const TEAM_IN_MATCH_DELETE_MESSAGE =
+  'Este time está em uma partida. Use Excluir na partida antes de excluir o time.';
+
+/** Verdadeiro se alguma partida (qualquer status ou rodada) lista este time como lado A ou B. */
+export async function teamDeleteBlockedByMatch(teamId) {
+  const db = await openDB();
+  const readTx = db.transaction('matches', 'readonly');
+  const matches = await promisify(readTx.objectStore('matches').getAll());
+  return (matches || []).some((m) => m.teamA === teamId || m.teamB === teamId);
+}
+
 /**
  * Apaga time se não houver partida (qualquer status) referenciando teamA/teamB.
  * Jogadores do elenco voltam à fila (`available` + joinedAt), como em dissolver time após partida.
  */
 export async function deleteTeam(teamId) {
-  const db = await openDB();
-  const readTx = db.transaction('matches', 'readonly');
-  const matches = await promisify(readTx.objectStore('matches').getAll());
-  for (const m of matches || []) {
-    if (m.teamA === teamId || m.teamB === teamId) {
-      throw new Error(
-        'Este time está em uma partida. Cancele ou exclua a partida antes de excluir o time.'
-      );
-    }
+  if (await teamDeleteBlockedByMatch(teamId)) {
+    throw new Error(TEAM_IN_MATCH_DELETE_MESSAGE);
   }
 
+  const db = await openDB();
   const writeTx = db.transaction(['teams', 'players'], 'readwrite');
   const teamsStore = writeTx.objectStore('teams');
   const playersStore = writeTx.objectStore('players');

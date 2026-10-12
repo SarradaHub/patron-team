@@ -61,12 +61,8 @@ Then('teams in field panel should show {int} team', async function (count) {
   await expect(heading).toContainText(`(${count})`);
 });
 
-When('I click suggest match', async function () {
-  await this.page.click(appSelectors.controls.suggestMatchButton);
-});
-
-When('I click schedule suggested match', async function () {
-  await this.page.click(appSelectors.controls.scheduleSuggestedButton);
+When('I click schedule next match', async function () {
+  await this.page.click(appSelectors.controls.scheduleNextButton);
 });
 
 Then('matches panel should include a scheduled badge', async function () {

@@ -19,6 +19,5 @@ Feature: Suggest and schedule next match
     And I set team size to 5
     And I click form one team
     And I click form one team
-    When I click suggest match
-    And I click schedule suggested match
+    When I click schedule next match
     Then matches panel should include a scheduled badge

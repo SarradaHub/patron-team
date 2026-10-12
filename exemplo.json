@@ -1,0 +1,16 @@
+{
+  "players": [
+    { "id": "a1b2c3d4-0001-4000-8000-000000000001", "name": "Carlos", "status": "available", "joinedAt": "2026-01-01T10:00:00.000Z", "goals": 3, "assists": 1 },
+    { "id": "a1b2c3d4-0002-4000-8000-000000000002", "name": "Ana", "status": "available", "joinedAt": "2026-01-01T10:01:00.000Z", "goals": 5, "assists": 2 },
+    { "id": "a1b2c3d4-0003-4000-8000-000000000003", "name": "Bruno", "status": "available", "joinedAt": "2026-01-01T10:02:00.000Z", "goals": 0, "assists": 4 },
+    { "id": "a1b2c3d4-0004-4000-8000-000000000004", "name": "Diana", "status": "available", "joinedAt": "2026-01-01T10:03:00.000Z", "goals": 2, "assists": 0 },
+    { "id": "a1b2c3d4-0005-4000-8000-000000000005", "name": "Eduardo", "status": "available", "joinedAt": "2026-01-01T10:04:00.000Z", "goals": 1, "assists": 3 },
+    { "id": "a1b2c3d4-0006-4000-8000-000000000006", "name": "Fernanda", "status": "available", "joinedAt": "2026-01-01T10:05:00.000Z", "goals": 0, "assists": 0 },
+    { "id": "a1b2c3d4-0007-4000-8000-000000000007", "name": "Gabriel", "status": "available", "joinedAt": "2026-01-01T10:06:00.000Z", "goals": 4, "assists": 1 },
+    { "id": "a1b2c3d4-0008-4000-8000-000000000008", "name": "Helena", "status": "available", "joinedAt": "2026-01-01T10:07:00.000Z", "goals": 0, "assists": 0 },
+    { "id": "a1b2c3d4-0009-4000-8000-000000000009", "name": "Igor", "status": "available", "joinedAt": "2026-01-01T10:08:00.000Z", "goals": 2, "assists": 2 },
+    { "id": "a1b2c3d4-0010-4000-8000-000000000010", "name": "Juliana", "status": "available", "joinedAt": "2026-01-01T10:09:00.000Z", "goals": 1, "assists": 1 }
+  ],
+  "teams": [],
+  "matches": []
+}
