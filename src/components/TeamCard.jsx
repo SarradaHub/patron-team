@@ -10,6 +10,7 @@ import React from 'react';
  * @param {string} props.label - Rótulo do time (ex.: "Time A", "Time B")
  * @param {function} [props.onToggleBlock] - alterna time bloqueado (próxima partida)
  * @param {function} [props.onEditTeam] - (team, defaultLabel) abre edição de rótulo
+ * @param {function} [props.onDeleteTeam] - exclui o time (o caller confirma)
  * @param {number} [props.waitingQueueIndex] - posição na fila “próximos” (1-based), alinhada à ordem global
  * @param {Record<string, number>} [props.playerFilaNumberById] - # na fila de jogadores (mesma ordem que QueueList, sem só-goleiro)
  */
@@ -19,6 +20,7 @@ export default function TeamCard({
   label,
   onToggleBlock,
   onEditTeam,
+  onDeleteTeam,
   waitingQueueIndex,
   playerFilaNumberById = {},
 }) {
@@ -93,6 +95,15 @@ export default function TeamCard({
             onClick={() => onEditTeam(team, label || 'Time')}
           >
             Editar
+          </button>
+        )}
+        {onDeleteTeam && (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm btn-danger-outline"
+            onClick={() => onDeleteTeam(team.id)}
+          >
+            Excluir
           </button>
         )}
         {onToggleBlock && (

@@ -8,6 +8,7 @@ import React, { useMemo } from 'react';
  * @param {function} props.onRemove
  * @param {function} [props.onRestore] — lesionado/cansado → disponível (fim da fila)
  * @param {function} [props.onEditPlayer] — abre edição do nome do jogador
+ * @param {function} [props.onDeletePlayer] — exclui o jogador (o caller confirma)
  * @param {object[]} [props.waitingTeams] — times `waiting` da rodada, já ordenados (ex.: sortWaitingTeamsForRound)
  */
 function PlayerRow({
@@ -18,6 +19,7 @@ function PlayerRow({
   onRemove,
   onRestore,
   onEditPlayer,
+  onDeletePlayer,
 }) {
   const sc = statusClass[player.status] || '';
 
@@ -26,15 +28,26 @@ function PlayerRow({
       <span className="player-position">#{index + 1}</span>
       <span className="player-name">{player.name || '—'}</span>
       <span className="player-status">{statusText(player)}</span>
-      {onEditPlayer && (
+      {(onEditPlayer || onDeletePlayer) && (
         <div className="player-actions player-actions-edit">
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={() => onEditPlayer(player)}
-          >
-            Editar
-          </button>
+          {onEditPlayer && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => onEditPlayer(player)}
+            >
+              Editar
+            </button>
+          )}
+          {onDeletePlayer && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm btn-danger-outline"
+              onClick={() => onDeletePlayer(player.id)}
+            >
+              Excluir
+            </button>
+          )}
         </div>
       )}
       {player.status === 'in_field' && (
@@ -115,6 +128,7 @@ export default function QueueList({
   onRemove,
   onRestore,
   onEditPlayer,
+  onDeletePlayer,
   waitingTeams = [],
 }) {
   const waitingNumberByPlayerId = useMemo(() => {
@@ -168,6 +182,7 @@ export default function QueueList({
               onRemove={onRemove}
               onRestore={onRestore}
               onEditPlayer={onEditPlayer}
+              onDeletePlayer={onDeletePlayer}
             />
           ))}
         </ul>

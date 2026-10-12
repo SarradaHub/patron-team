@@ -11,6 +11,7 @@ export default function WaitingTeamsList({
   playerFilaNumberById,
   waitingQueueIndexByTeamId,
   onEditTeam,
+  onDeleteTeam,
 }) {
   if (teams.length === 0) {
     return <p className="empty-message">Nenhum time aguardando nesta rodada.</p>;
@@ -27,6 +28,7 @@ export default function WaitingTeamsList({
           label={teamLabelById[team.id] || 'Time'}
           waitingQueueIndex={waitingQueueIndexByTeamId[team.id]}
           onEditTeam={onEditTeam}
+          onDeleteTeam={onDeleteTeam}
         />
       ))}
     </div>

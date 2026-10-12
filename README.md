@@ -57,7 +57,7 @@ npm run test:watch
 ## Uso
 
 ### 1. Adicionar jogadores
-No painel **Controles**, digite o nome do jogador e clique em **➕ Adicionar**. Os jogadores aparecem na fila ordenados por chegada.
+No painel **Controles**, digite o nome do jogador e clique em **➕ Adicionar** (Enter também envia). O campo de nome permanece focado para o próximo jogador. Os jogadores aparecem na fila ordenados por chegada.
 
 ### 2. Rodada ativa
 No painel **Rodada**, escolha a rodada ou crie uma nova. Todos os times e partidas exibidos pertencem à rodada ativa.
@@ -72,7 +72,7 @@ Com pelo menos 2 times em campo, use os botões para registrar o resultado:
 - **🤝 Empate** — Ambos os times saem e voltam ao fim da fila
 
 ### 5. Partida agendada, cronômetro e stats
-**Sugerir confronto** e **Agendar partida sugerida** criam uma partida agendada. No histórico, abra **Stats** para gols/assistências/gols contra/goleiro por jogador (validações tipo SLF); no mesmo modal, em **Resultado**, escolha quem venceu ou **Empate** (salva stats e finaliza — empate pode abrir desempate).
+**Agendar próxima partida** cria uma partida agendada com os dois primeiros times em campo que não estão bloqueados. No card da partida, **Time A venceu** e **Time B venceu** ficam lado a lado; **Empate** fica na linha de baixo (empate pode abrir desempate). Abra **Stats** para gols/assistências/gols contra/goleiro por jogador (validações tipo SLF); o mesmo modal ainda tem **Resultado** para salvar as linhas e finalizar. Para remover a partida, use **Excluir** no card.
 
 **Cronômetro:** no painel **Controles** (lateral), após agendar uma partida, use **5 / 10 / 15 min e iniciar** para começar na hora, ou edite os minutos (**Salvar duração** ou blur no campo) e **Iniciar**. **Zerar** interrompe sem mudar a duração salva. Várias partidas agendadas: escolha qual no menu **Partida agendada**. O tempo também aparece na faixa abaixo de **Rodada** quando houver countdown ativo.
 

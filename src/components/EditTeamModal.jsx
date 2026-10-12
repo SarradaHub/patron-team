@@ -112,6 +112,7 @@ export default function EditTeamModal({
             onChange={(e) => setText(e.target.value)}
             placeholder={defaultLabel || 'Time'}
             autoComplete="off"
+            autoFocus
           />
 
           <h4 className="edit-team-section-title">Elenco ({rosterIds.length})</h4>

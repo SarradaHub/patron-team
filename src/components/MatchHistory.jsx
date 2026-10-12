@@ -12,6 +12,7 @@ export default function MatchHistory({
   onEditStats,
   onEditScheduledMatch,
   onDeleteMatch,
+  onFinalizeResult,
 }) {
   const teamMap = {};
   for (const t of teams) {
@@ -117,6 +118,31 @@ export default function MatchHistory({
                     </button>
                   )}
                 </div>
+                {match.status === 'scheduled' && onFinalizeResult && (
+                  <div className="match-line-finalize">
+                    <button
+                      type="button"
+                      className="btn btn-match btn-a-win"
+                      onClick={() => onFinalizeResult(match, 'A_win')}
+                    >
+                      Time A venceu
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-match btn-b-win"
+                      onClick={() => onFinalizeResult(match, 'B_win')}
+                    >
+                      Time B venceu
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-match btn-draw"
+                      onClick={() => onFinalizeResult(match, 'draw')}
+                    >
+                      Empate
+                    </button>
+                  </div>
+                )}
                 {match.status === 'finalized' && match.result && (
                   <div className="match-line-result-outcome">
                     <span className="match-score-result">{outcomeText(match)}</span>
