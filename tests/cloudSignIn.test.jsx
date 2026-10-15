@@ -58,8 +58,13 @@ describe('Enviar para nuvem sem sessão', () => {
     const exportButton = container.querySelector('[data-testid="export-data-button"]');
     await act(async () => {
       exportButton.click();
-      await new Promise((resolve) => setTimeout(resolve, 50));
     });
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (container.querySelector('#login-user')) break;
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+    }
 
     expect(container.querySelector('#login-user')).not.toBeNull();
     expect(container.querySelector('#login-pass')).not.toBeNull();
