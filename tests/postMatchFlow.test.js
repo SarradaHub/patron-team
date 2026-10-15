@@ -97,7 +97,7 @@ describe('planNextMatch', () => {
   it('empate + 1 waiting pré: exige tiebreaker e oponente da fila livre', () => {
     const match = { teamA: 'A', teamB: 'B' };
     const teams = [
-      mkTeam('W', 'waiting', [1], { enteredWaitingAt: '2018-01-01T00:00:00.000Z' }),
+      mkTeam('W', 'waiting', [1, 'w2'], { enteredWaitingAt: '2018-01-01T00:00:00.000Z' }),
       mkTeam('A', 'waiting', [2]),
       mkTeam('B', 'waiting', [3]),
       mkTeam('Bench', 'waiting', ['10', '11'], { enteredWaitingAt: '2021-01-01T00:00:00.000Z' }),
@@ -139,7 +139,7 @@ describe('planNextMatch', () => {
   it('empate + 1 waiting: fila livre que não completa o time não agenda', () => {
     const match = { teamA: 'A', teamB: 'B' };
     const teams = [
-      mkTeam('W', 'waiting', [1], { enteredWaitingAt: '2018-01-01T00:00:00.000Z' }),
+      mkTeam('W', 'waiting', [1, 'w2'], { enteredWaitingAt: '2018-01-01T00:00:00.000Z' }),
       mkTeam('A', 'waiting', [2]),
       mkTeam('B', 'waiting', [3]),
       mkTeam('Bench', 'waiting', ['10', '11'], { enteredWaitingAt: '2021-01-01T00:00:00.000Z' }),
@@ -161,6 +161,34 @@ describe('planNextMatch', () => {
     });
     expect(plan.type).toBe('none');
     expect(plan.reason).toBe('fila_insuficiente_empate_1_waiting');
+  });
+
+  it('empate + único time em espera curto: não agenda e não completa pela fila', () => {
+    const match = { teamA: 'A', teamB: 'B' };
+    const teams = [
+      mkTeam('W', 'waiting', ['w1', 'w2', 'w3'], { enteredWaitingAt: '2018-01-01T00:00:00.000Z' }),
+      mkTeam('A', 'in_field', ['a1', 'a2', 'a3', 'a4', 'a5']),
+      mkTeam('B', 'in_field', ['b1', 'b2', 'b3', 'b4', 'b5']),
+    ];
+    const players = [
+      mkPlayer('q1', 'available', '2020-01-01T00:00:00.000Z'),
+      mkPlayer('q2', 'available', '2020-01-02T00:00:00.000Z'),
+      mkPlayer('q3', 'available', '2020-01-03T00:00:00.000Z'),
+      mkPlayer('q4', 'available', '2020-01-04T00:00:00.000Z'),
+      mkPlayer('q5', 'available', '2020-01-05T00:00:00.000Z'),
+    ];
+    const plan = planNextMatch({
+      roundId: rid,
+      match,
+      result: 'draw',
+      teams,
+      players,
+      teamSize: 5,
+      preWaitingTeamIds: ['W'],
+      tiebreakerWinnerTeamId: 'A',
+    });
+    expect(plan.type).toBe('none');
+    expect(plan.reason).toBe('waiting_elenco_incompleto');
   });
 
   it('vitória + único waiting subdimensionado: remonta time com fila', () => {

@@ -56,6 +56,11 @@ export function planNextMatch(ctx) {
 
   if (result === 'draw') {
     if (preWaitingCount === 1) {
+      const w = teams.find((t) => t.id === preWaitingTeamIds[0]);
+      if (!w || w.status !== 'waiting') return { type: 'none', reason: 'sem_waiting' };
+      if (!rosterMeetsTeamSize(w, teamSize)) {
+        return { type: 'none', reason: 'waiting_elenco_incompleto' };
+      }
       const onWaitingRoster = new Set(
         teams.filter((t) => t.status === 'waiting').flatMap((t) => t.players || []),
       );
@@ -66,8 +71,6 @@ export function planNextMatch(ctx) {
         return { type: 'none', reason: 'fila_insuficiente_empate_1_waiting' };
       }
       const newPlayerIds = freeQueue.slice(0, teamSize).map((p) => p.id);
-      const w = teams.find((t) => t.id === preWaitingTeamIds[0]);
-      if (!w || w.status !== 'waiting') return { type: 'none', reason: 'sem_waiting' };
       if (!tiebreakerWinnerTeamId || ![match.teamA, match.teamB].includes(tiebreakerWinnerTeamId)) {
         return { type: 'none', reason: 'tiebreaker_obrigatorio' };
       }

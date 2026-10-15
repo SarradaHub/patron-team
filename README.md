@@ -29,7 +29,7 @@ O site publicado está em [paulogrell.github.io/patron-team](https://paulogrell.
 4. No time em campo, **Bloquear time** e **Desbloquear time** alternam na hora.
 5. Com pelo menos um time em campo, abra **Rebalancear**. O botão pede confirmação e fica desligado até haver dois times em campo desbloqueados.
 
-Se a fila for curta demais para o próximo jogo, a partida termina e o aviso diz que a próxima partida não foi criada.
+Se a fila for curta demais para o próximo jogo, a partida termina e o aviso diz que a próxima partida não foi criada. O mesmo aviso aparece no empate quando o único time em espera tem menos jogadores do que **Jogadores por time**: esse time continua em espera e não é completado pela fila.
 
 **Importar dados** pede confirmação. Um arquivo que não tenha as listas `players`, `teams` e `matches` é recusado e a noite local fica. **Limpar cache local** também pede confirmação. Se outra aba ainda estiver aberta, o aviso diz que a limpeza termina quando essas abas fecharem.
 
