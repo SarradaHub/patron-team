@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import ModalFrame from './ModalFrame.jsx';
 
 function teamOptionLabel(team, teamLabelById) {
   const n = team?.players?.length ?? 0;
@@ -51,7 +52,7 @@ export default function EditScheduledMatchModal({
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-match-title">
+    <ModalFrame onClose={onClose} labelledBy="edit-match-title">
       <div className="modal-content match-stats-modal">
         <h3 id="edit-match-title">Editar partida agendada</h3>
         <p className="modal-sub">
@@ -114,6 +115,6 @@ export default function EditScheduledMatchModal({
           </div>
         </form>
       </div>
-    </div>
+    </ModalFrame>
   );
 }

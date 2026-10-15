@@ -190,7 +190,7 @@ No issue tracker is configured, so nothing was filed. Category is bug or enhance
 | --- | --- | --- | --- | --- |
 | Sair blanks the app (hooks after the early return in `App.jsx`) | bug | Critical | Small | 1 click, then a reload. Resolved: those hooks now run before the login return in `src/App.jsx`, so Sair renders the login form. |
 | Dark active tab 3.21:1 at 14px | bug | High | Small | Contrast. Keep 14px. Resolved: the dark active tab uses its own `#1a7f37` fill. The 14px label stays. Shared green text tokens were left alone. |
-| Modal Escape, focus leak, no scroll lock | bug | High | Medium | +1 click to close, plus a keyboard loop |
+| Modal Escape, focus leak, no scroll lock | bug | High | Medium | +1 click to close, plus a keyboard loop. Resolved: a shared frame closes the top dialog on Escape, wraps Tab inside it, and locks page scroll while it is open. A confirm ignores the backdrop. |
 | Back leaves the app; paths are not sections | enhancement | High | Medium | One Back is a dead end |
 | Offline reload drops the controls while the title remains | bug | High | Medium | One reload |
 | Empty name is silent | bug | Medium | Small | 1 wasted click. Resolved: empty Adicionar shows `Informe o nome do jogador.` next to the field. |

@@ -10,6 +10,7 @@ import {
 import { labelMatchSide } from '../domain/teamLabels.js';
 import { validateMatchPlayerStats } from '../domain/playerStatRules.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
+import ModalFrame from './ModalFrame.jsx';
 
 const RESULT_CONFIRM = {
   A_win: { label: 'Time A venceu', ending: 'Time A venceu' },
@@ -440,7 +441,7 @@ export default function MatchStatsModal({
   const showResultActions = isScheduled && onFinalizeFromStats && onRequestDrawFromStats;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <ModalFrame onClose={onClose}>
       <div className="modal-content match-stats-modal match-stats-modal-wide">
         <h3>Stats da partida</h3>
         <p className="match-stats-score-line">
@@ -611,6 +612,6 @@ export default function MatchStatsModal({
           }}
         />
       )}
-    </div>
+    </ModalFrame>
   );
 }
