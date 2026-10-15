@@ -147,16 +147,6 @@ export default function App() {
     }
   }, [autenticado, matches, clockNow]);
 
-  if (!autenticado) {
-    return (
-      <>
-        <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
-        <ThemeToggle className="login-theme-toggle" />
-        <LoginScreen onLogin={handleLogin} />
-      </>
-    );
-  }
-
   const refreshData = useCallback(async () => {
     try {
       await ensureDefaultActiveRound();
@@ -185,12 +175,135 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!autenticado) return undefined;
     refreshData();
     const unsubscribe = onChange(() => {
       refreshData();
     });
     return unsubscribe;
-  }, [refreshData]);
+  }, [autenticado, refreshData]);
+
+  const handleTimerMatchPick = useCallback((matchId) => {
+    setTimerTargetMatchId(matchId || null);
+    if (activeRoundId && matchId) {
+      try {
+        localStorage.setItem(`arjen-timer-match-${activeRoundId}`, matchId);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [activeRoundId]);
+
+  const handleTimerPresetStart = useCallback(
+    async (matchId, minutes) => {
+      try {
+        await setScheduledMatchTimerDuration(matchId, minutes);
+        await startScheduledMatchCountdown(matchId);
+        toast.success('Cronômetro iniciado.');
+        await refreshData();
+      } catch (err) {
+        toast.error(err.message);
+      }
+    },
+    [refreshData]
+  );
+
+  const teamsInField = teams.filter((t) => t.status === 'in_field');
+  const globalStatsByPlayerId = useMemo(
+    () => Object.fromEntries((globalStatsRows || []).map((row) => [row.playerId, row])),
+    [globalStatsRows]
+  );
+  const playersForGlobalStats = useMemo(
+    () =>
+      players.map((player) => {
+        const statRow = globalStatsByPlayerId[player.id] || {};
+        return {
+          ...player,
+          wins: statRow.wins || 0,
+          draws: statRow.draws || 0,
+          losses: statRow.losses || 0,
+        };
+      }),
+    [players, globalStatsByPlayerId]
+  );
+  const fifoWaitingTeams = useMemo(
+    () =>
+      activeRoundId
+        ? sortWaitingTeamsForRound(teams, activeRoundId, players, teamSize)
+        : [],
+    [teams, activeRoundId, players, teamSize]
+  );
+  const waitingQueueIndexByTeamId = useMemo(
+    () =>
+      Object.fromEntries(fifoWaitingTeams.map((team, index) => [team.id, index + 1])),
+    [fifoWaitingTeams]
+  );
+  const teamLabelById = useMemo(
+    () => buildTeamLabelById(teamsInField, fifoWaitingTeams),
+    [teamsInField, fifoWaitingTeams]
+  );
+
+  const teamById = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t])), [teams]);
+
+  const timerMatchOptions = useMemo(() => {
+    if (!activeRoundId) return [];
+    return matches
+      .filter((m) => m.status === 'scheduled' && m.roundId === activeRoundId)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .map((m) => ({
+        id: m.id,
+        label: `${labelMatchSide(m.teamA, 'A', teamById)} × ${labelMatchSide(m.teamB, 'B', teamById)}`,
+      }));
+  }, [matches, activeRoundId, teamById]);
+
+  const timerTargetMatch = useMemo(() => {
+    if (!timerTargetMatchId) return null;
+    return (
+      matches.find((m) => m.id === timerTargetMatchId && m.status === 'scheduled') ?? null
+    );
+  }, [matches, timerTargetMatchId]);
+
+  const playerFilaNumberById = useMemo(() => {
+    const list = players.filter((p) => !p.goalkeeperOnly);
+    return Object.fromEntries(list.map((p, i) => [p.id, i + 1]));
+  }, [players]);
+
+  const unavailableSummary = useMemo(() => {
+    let injured = 0;
+    let tired = 0;
+    for (const p of players) {
+      if (p.status === 'injured') injured += 1;
+      else if (p.status === 'tired') tired += 1;
+    }
+    return { injured, tired, total: injured + tired };
+  }, [players]);
+
+  const linePlayersWithoutTeam = useMemo(() => {
+    if (!activeRoundId) return 0;
+    const onRoster = new Set();
+    for (const t of teams) {
+      if (t.roundId !== activeRoundId) continue;
+      if (t.status !== 'in_field' && t.status !== 'waiting') continue;
+      for (const pid of t.players || []) onRoster.add(pid);
+    }
+    let n = 0;
+    for (const p of players) {
+      if (p.goalkeeperOnly) continue;
+      if (p.status === 'injured' || p.status === 'tired') continue;
+      if (!onRoster.has(p.id)) n += 1;
+    }
+    return n;
+  }, [activeRoundId, teams, players]);
+
+  if (!autenticado) {
+    return (
+      <>
+        <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
+        <ThemeToggle className="login-theme-toggle" />
+        <LoginScreen onLogin={handleLogin} />
+      </>
+    );
+  }
 
   const handleSelectRound = async (roundId) => {
     try {
@@ -541,31 +654,6 @@ export default function App() {
     }
   };
 
-  const handleTimerMatchPick = useCallback((matchId) => {
-    setTimerTargetMatchId(matchId || null);
-    if (activeRoundId && matchId) {
-      try {
-        localStorage.setItem(`arjen-timer-match-${activeRoundId}`, matchId);
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [activeRoundId]);
-
-  const handleTimerPresetStart = useCallback(
-    async (matchId, minutes) => {
-      try {
-        await setScheduledMatchTimerDuration(matchId, minutes);
-        await startScheduledMatchCountdown(matchId);
-        toast.success('Cronômetro iniciado.');
-        await refreshData();
-      } catch (err) {
-        toast.error(err.message);
-      }
-    },
-    [refreshData]
-  );
-
   const handleExport = async () => {
     try {
       const data = await exportData();
@@ -603,93 +691,6 @@ export default function App() {
       toast.error(`Erro ao limpar cache: ${err.message}`);
     }
   };
-
-  const teamsInField = teams.filter((t) => t.status === 'in_field');
-  const globalStatsByPlayerId = useMemo(
-    () => Object.fromEntries((globalStatsRows || []).map((row) => [row.playerId, row])),
-    [globalStatsRows]
-  );
-  const playersForGlobalStats = useMemo(
-    () =>
-      players.map((player) => {
-        const statRow = globalStatsByPlayerId[player.id] || {};
-        return {
-          ...player,
-          wins: statRow.wins || 0,
-          draws: statRow.draws || 0,
-          losses: statRow.losses || 0,
-        };
-      }),
-    [players, globalStatsByPlayerId]
-  );
-  const fifoWaitingTeams = useMemo(
-    () =>
-      activeRoundId
-        ? sortWaitingTeamsForRound(teams, activeRoundId, players, teamSize)
-        : [],
-    [teams, activeRoundId, players, teamSize]
-  );
-  const waitingQueueIndexByTeamId = useMemo(
-    () =>
-      Object.fromEntries(fifoWaitingTeams.map((team, index) => [team.id, index + 1])),
-    [fifoWaitingTeams]
-  );
-  const teamLabelById = useMemo(
-    () => buildTeamLabelById(teamsInField, fifoWaitingTeams),
-    [teamsInField, fifoWaitingTeams]
-  );
-
-  const teamById = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t])), [teams]);
-
-  const timerMatchOptions = useMemo(() => {
-    if (!activeRoundId) return [];
-    return matches
-      .filter((m) => m.status === 'scheduled' && m.roundId === activeRoundId)
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .map((m) => ({
-        id: m.id,
-        label: `${labelMatchSide(m.teamA, 'A', teamById)} × ${labelMatchSide(m.teamB, 'B', teamById)}`,
-      }));
-  }, [matches, activeRoundId, teamById]);
-
-  const timerTargetMatch = useMemo(() => {
-    if (!timerTargetMatchId) return null;
-    return (
-      matches.find((m) => m.id === timerTargetMatchId && m.status === 'scheduled') ?? null
-    );
-  }, [matches, timerTargetMatchId]);
-
-  const playerFilaNumberById = useMemo(() => {
-    const list = players.filter((p) => !p.goalkeeperOnly);
-    return Object.fromEntries(list.map((p, i) => [p.id, i + 1]));
-  }, [players]);
-
-  const unavailableSummary = useMemo(() => {
-    let injured = 0;
-    let tired = 0;
-    for (const p of players) {
-      if (p.status === 'injured') injured += 1;
-      else if (p.status === 'tired') tired += 1;
-    }
-    return { injured, tired, total: injured + tired };
-  }, [players]);
-
-  const linePlayersWithoutTeam = useMemo(() => {
-    if (!activeRoundId) return 0;
-    const onRoster = new Set();
-    for (const t of teams) {
-      if (t.roundId !== activeRoundId) continue;
-      if (t.status !== 'in_field' && t.status !== 'waiting') continue;
-      for (const pid of t.players || []) onRoster.add(pid);
-    }
-    let n = 0;
-    for (const p of players) {
-      if (p.goalkeeperOnly) continue;
-      if (p.status === 'injured' || p.status === 'tired') continue;
-      if (!onRoster.has(p.id)) n += 1;
-    }
-    return n;
-  }, [activeRoundId, teams, players]);
 
   const scheduledInRound = matches.filter(
     (m) => m.status === 'scheduled' && m.roundId === activeRoundId
