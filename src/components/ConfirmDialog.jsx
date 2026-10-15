@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalFrame from './ModalFrame.jsx';
 
 /**
  * Diálogo de confirmação acessível (substitui window.confirm onde o nativo é bloqueado).
@@ -12,13 +13,12 @@ export default function ConfirmDialog({
   onCancel,
 }) {
   return (
-    <div
-      className="modal-backdrop"
+    <ModalFrame
+      onClose={onCancel}
+      closeOnBackdrop={false}
       role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="confirm-dialog-title"
-      aria-describedby="confirm-dialog-message"
-      onClick={onCancel}
+      labelledBy="confirm-dialog-title"
+      describedBy="confirm-dialog-message"
     >
       <div
         className="modal-content confirm-dialog"
@@ -37,6 +37,6 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ModalFrame>
   );
 }

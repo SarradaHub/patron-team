@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ModalFrame from './ModalFrame.jsx';
 
 export default function EditPlayerModal({ player, onClose, onSave, onDelete }) {
   const [name, setName] = useState(player?.name ?? '');
@@ -21,7 +22,7 @@ export default function EditPlayerModal({ player, onClose, onSave, onDelete }) {
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-player-title">
+    <ModalFrame onClose={onClose} labelledBy="edit-player-title">
       <div className="modal-content match-stats-modal">
         <h3 id="edit-player-title">Editar jogador</h3>
         <p className="modal-sub">Altere o nome exibido na fila e nos times.</p>
@@ -80,6 +81,6 @@ export default function EditPlayerModal({ player, onClose, onSave, onDelete }) {
           </div>
         </form>
       </div>
-    </div>
+    </ModalFrame>
   );
 }
