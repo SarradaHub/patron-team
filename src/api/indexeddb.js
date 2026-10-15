@@ -1936,13 +1936,8 @@ export async function clearScheduledMatchCountdown(matchId) {
 }
 
 /** Soma gols + gols contra do adversário em player_stats (placar na lista de partidas). */
-export async function getMatchScoresForRound(roundId) {
-  const matches = await getMatches(roundId);
+function matchScoresForMatches(matches, allStats, roundId) {
   if (!matches.length) return {};
-  const db = await openDB();
-  const allStats = await promisify(
-    db.transaction('player_stats', 'readonly').objectStore('player_stats').getAll()
-  );
   const byMatchId = {};
   for (const m of matches) {
     byMatchId[m.id] = { teamA: m.teamA, teamB: m.teamB, scoreA: 0, scoreB: 0 };
@@ -1962,6 +1957,16 @@ export async function getMatchScoresForRound(roundId) {
     }
   }
   return byMatchId;
+}
+
+export async function getMatchScoresForRound(roundId) {
+  const matches = await getMatches(roundId);
+  if (!matches.length) return {};
+  const db = await openDB();
+  const allStats = await promisify(
+    db.transaction('player_stats', 'readonly').objectStore('player_stats').getAll()
+  );
+  return matchScoresForMatches(matches, allStats, roundId);
 }
 
 function fifoPreWaitingTeamIds(teams, roundId, players, rosterTargetSize) {
@@ -2769,6 +2774,103 @@ export async function getGlobalPlayerStatistics() {
     statsRows: allStats || [],
     finalizedMatches: finalized,
   });
+}
+
+const NIGHT_STORES = ['players', 'teams', 'matches', 'rounds', 'meta', 'player_stats'];
+
+function metaValue(meta, key) {
+  const row = (meta || []).find((item) => item.key === key);
+  return row ? row.value : null;
+}
+
+function withMetaValue(meta, key, value) {
+  const next = (meta || []).filter((item) => item.key !== key);
+  next.push({ key, value });
+  return next;
+}
+
+/**
+ * Um momento da noite: as seis stores numa transação readonly.
+ * Placar, estatísticas da rodada e estatísticas globais saem do mesmo array de stats.
+ */
+export async function loadNightSnapshot() {
+  const db = await openDB();
+  const tx = db.transaction(NIGHT_STORES, 'readonly');
+  const [playersRaw, teamsRaw, matchesRaw, roundsRaw, metaRaw, statsRaw] = await Promise.all([
+    promisify(tx.objectStore('players').getAll()),
+    promisify(tx.objectStore('teams').getAll()),
+    promisify(tx.objectStore('matches').getAll()),
+    promisify(tx.objectStore('rounds').getAll()),
+    promisify(tx.objectStore('meta').getAll()),
+    promisify(tx.objectStore('player_stats').getAll()),
+  ]);
+
+  let rounds = [...(roundsRaw || [])].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+  );
+  let meta = metaRaw || [];
+  let activeRoundId = metaValue(meta, 'activeRoundId');
+  const roundKnown = rounds.some((round) => round.id === activeRoundId);
+  if (!activeRoundId || !roundKnown) {
+    if (rounds.length === 0) {
+      const created = await createRound();
+      rounds = [created];
+      activeRoundId = created.id;
+    } else {
+      activeRoundId = rounds[0].id;
+      await setActiveRoundId(activeRoundId);
+    }
+    meta = withMetaValue(meta, 'activeRoundId', activeRoundId);
+  }
+
+  const players = [...(playersRaw || [])].sort(
+    (a, b) => new Date(a.joinedAt) - new Date(b.joinedAt)
+  );
+  const teams = activeRoundId
+    ? (teamsRaw || []).filter((team) => team.roundId === activeRoundId)
+    : [...(teamsRaw || [])];
+  const matches = activeRoundId
+    ? (matchesRaw || []).filter((match) => match.roundId === activeRoundId)
+    : [...(matchesRaw || [])];
+  const playerStats = statsRaw || [];
+  const finalizedRound = matches.filter((match) => match.status === 'finalized' && match.result);
+  const finalizedAll = (matchesRaw || []).filter(
+    (match) => match.status === 'finalized' && match.result
+  );
+  const playerIdsInRound = new Set();
+  for (const team of teams) {
+    for (const playerId of team.players || []) playerIdsInRound.add(playerId);
+  }
+
+  const roundStats = activeRoundId
+    ? aggregatePlayerStatistics({
+        players,
+        statsRows: playerStats.filter((row) => row.roundId === activeRoundId),
+        finalizedMatches: finalizedRound,
+        seedPlayerIds: playerIdsInRound,
+      })
+    : [];
+  const globalStats = aggregatePlayerStatistics({
+    players,
+    statsRows: playerStats,
+    finalizedMatches: finalizedAll,
+  });
+  const matchScores = activeRoundId
+    ? matchScoresForMatches(matches, playerStats, activeRoundId)
+    : {};
+
+  return {
+    players,
+    teams,
+    matches,
+    rounds,
+    meta,
+    player_stats: playerStats,
+    activeRoundId,
+    roundStats,
+    globalStats,
+    matchScores,
+  };
 }
 
 // ---------- Próxima partida ----------

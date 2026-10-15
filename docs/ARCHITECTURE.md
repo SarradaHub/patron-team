@@ -187,7 +187,7 @@ Aba 1 faz operação (ex: addPlayer)
         ▼
      Aba 2 recebe mensagem
         │
-        └─ Callback chama refreshData() → recarrega tudo do IndexedDB
+        └─ Callback chama refreshData() → loadNightSnapshot() numa transação readonly
 ```
 
 ## Domínio (JS puro)
@@ -211,10 +211,10 @@ App
 │   └── PlayerStats (gols e assistências somados de player_stats)
 │
 └── [Estatísticas da rodada]
-    └── RoundStatistics (agregado via getRoundStatistics)
+    └── RoundStatistics (agregado do mesmo snapshot de player_stats)
 ```
 
-Gols e assistências são gravados no card da partida (`bulkUpsertPlayerStats`). As duas abas de estatísticas leem `player_stats`.
+Gols e assistências são gravados no card da partida (`bulkUpsertPlayerStats`). O refresh lê `player_stats` uma vez (`loadNightSnapshot`) e as duas abas usam esse snapshot.
 
 **Migrações:** v1 → stores base; v2 → `goals`/`assists` em players; v3 → `rounds`, `meta`, `player_stats`, índices `roundId`, rodada padrão “Importado” e backfill em times/partidas existentes.
 
