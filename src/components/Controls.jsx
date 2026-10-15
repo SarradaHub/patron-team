@@ -356,7 +356,7 @@ export default function Controls({
             }
           }}
         >
-          Rodar Garbage Collector
+          Limpar referências
         </button>
       </section>
     </div>

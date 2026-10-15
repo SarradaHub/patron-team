@@ -30,6 +30,7 @@ import {
   getActiveRoundId,
   setActiveRoundId,
   getRounds,
+  updateRoundName,
   suggestNextMatchForRound,
   getRoundStatistics,
   getGlobalPlayerStatistics,
@@ -196,6 +197,15 @@ export default function App() {
       await setActiveRoundId(roundId);
       await refreshData();
       toast.success('Rodada ativa alterada.');
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleRenameRound = async (roundId, name) => {
+    try {
+      await updateRoundName(roundId, name);
+      await refreshData();
     } catch (err) {
       toast.error(err.message);
     }
@@ -681,6 +691,15 @@ export default function App() {
     return n;
   }, [activeRoundId, teams, players]);
 
+  const scheduledInRound = matches.filter(
+    (m) => m.status === 'scheduled' && m.roundId === activeRoundId
+  );
+  const sideMatch =
+    scheduledInRound.find((m) => m.id === timerTargetMatchId) || scheduledInRound[0] || null;
+  const sideByTeamId = {};
+  if (sideMatch?.teamA) sideByTeamId[sideMatch.teamA] = 'a';
+  if (sideMatch?.teamB) sideByTeamId[sideMatch.teamB] = 'b';
+
   const runningCountdowns = matches.filter(
     (m) => m.status === 'scheduled' && m.countdownEndsAt
   );
@@ -712,6 +731,7 @@ export default function App() {
         rounds={rounds}
         activeRoundId={activeRoundId}
         onSelectRound={handleSelectRound}
+        onRenameRound={handleRenameRound}
       />
 
       {activeTab === 'queue' && bannerMatch && (
@@ -829,10 +849,10 @@ export default function App() {
             <GoalkeeperQueuePanel players={players} onDeletePlayer={handleGoalkeeperPanelDelete} />
           </div>
           <div className="right-column">
-            <div className="panel teams-panel" data-testid="teams-in-field-panel">
+            <div className="panel teams-panel teams-in-field-panel" data-testid="teams-in-field-panel">
               <h2>Times em campo ({teamsInField.length})</h2>
               {teamsInField.length === 0 ? (
-                <p className="empty-message">Nenhum time em campo nesta rodada.</p>
+                <p className="empty-message">Nenhum time em campo. Forme times em Controles.</p>
               ) : (
                 <div className="teams-grid teams-grid-in-field">
                   {teamsInField.map((team) => (
@@ -842,6 +862,7 @@ export default function App() {
                       allPlayers={players}
                       playerFilaNumberById={playerFilaNumberById}
                       label={teamLabelById[team.id] || 'Time'}
+                      side={sideByTeamId[team.id]}
                       onEditTeam={(t, lbl) => {
                         setEditTeam(t);
                         setEditTeamDefaultLabel(lbl);
@@ -858,6 +879,7 @@ export default function App() {
                 teams={fifoWaitingTeams}
                 allPlayers={players}
                 teamLabelById={teamLabelById}
+                sideByTeamId={sideByTeamId}
                 playerFilaNumberById={playerFilaNumberById}
                 waitingQueueIndexByTeamId={waitingQueueIndexByTeamId}
                 onEditTeam={(t, lbl) => {
@@ -952,9 +974,6 @@ export default function App() {
         />
       )}
 
-      <footer className="app-footer">
-        <p>Arjen — IndexedDB v3</p>
-      </footer>
     </div>
   );
 }

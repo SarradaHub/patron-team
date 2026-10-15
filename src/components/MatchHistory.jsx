@@ -1,5 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { labelMatchSide } from '../domain/teamLabels.js';
+import ConfirmDialog from './ConfirmDialog.jsx';
+
+const RESULT_CONFIRM = {
+  A_win: { label: 'Time A venceu', message: 'Finalizar como Time A venceu?' },
+  B_win: { label: 'Time B venceu', message: 'Finalizar como Time B venceu?' },
+  draw: { label: 'Empate', message: 'Finalizar como empate?' },
+};
 
 /**
  * Histórico de partidas da rodada (finalizadas e agendadas) com placar numérico.
@@ -14,6 +21,7 @@ export default function MatchHistory({
   onDeleteMatch,
   onFinalizeResult,
 }) {
+  const [pendingResult, setPendingResult] = useState(null);
   const teamMap = {};
   for (const t of teams) {
     teamMap[t.id] = t;
@@ -60,7 +68,7 @@ export default function MatchHistory({
     <div className="panel history-panel" data-testid="matches-panel">
       <h2>Partidas da rodada ({matches.length})</h2>
       {sortedMatches.length === 0 ? (
-        <p className="empty-message">Nenhuma partida nesta rodada ainda.</p>
+        <p className="empty-message">Nenhuma partida nesta rodada. Agende a próxima partida em Controles.</p>
       ) : (
         <ul className="match-list">
           {sortedMatches.map((match) => (
@@ -123,21 +131,21 @@ export default function MatchHistory({
                     <button
                       type="button"
                       className="btn btn-match btn-a-win"
-                      onClick={() => onFinalizeResult(match, 'A_win')}
+                      onClick={() => setPendingResult({ match, result: 'A_win' })}
                     >
                       Time A venceu
                     </button>
                     <button
                       type="button"
                       className="btn btn-match btn-b-win"
-                      onClick={() => onFinalizeResult(match, 'B_win')}
+                      onClick={() => setPendingResult({ match, result: 'B_win' })}
                     >
                       Time B venceu
                     </button>
                     <button
                       type="button"
                       className="btn btn-match btn-draw"
-                      onClick={() => onFinalizeResult(match, 'draw')}
+                      onClick={() => setPendingResult({ match, result: 'draw' })}
                     >
                       Empate
                     </button>
@@ -152,6 +160,19 @@ export default function MatchHistory({
             </li>
           ))}
         </ul>
+      )}
+      {pendingResult && (
+        <ConfirmDialog
+          title="Confirmar resultado"
+          message={RESULT_CONFIRM[pendingResult.result].message}
+          confirmLabel={RESULT_CONFIRM[pendingResult.result].label}
+          onCancel={() => setPendingResult(null)}
+          onConfirm={() => {
+            const { match, result } = pendingResult;
+            setPendingResult(null);
+            onFinalizeResult?.(match, result);
+          }}
+        />
       )}
     </div>
   );

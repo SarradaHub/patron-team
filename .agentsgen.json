@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "mode": "safe",
+  "on_missing_markers": "write_generated",
+  "generated_suffix": ".generated",
+  "markers": {
+    "start": "<!-- AGENTSGEN:START section={section} -->",
+    "end": "<!-- AGENTSGEN:END section={section} -->"
+  },
+  "sections": [
+    "guardrails",
+    "workflow",
+    "style",
+    "verification",
+    "stack",
+    "repo_context"
+  ],
+  "presets": {},
+  "defaults": {},
+  "project": {
+    "primary_stack": "node",
+    "name": "patron-team",
+    "repo_root": ".",
+    "node_package_manager": "npm"
+  },
+  "paths": {
+    "docs": [
+      "README.md"
+    ],
+    "ci": ".github/workflows/",
+    "scripts": "scripts/",
+    "source_dirs": [
+      "src"
+    ],
+    "config_locations": [
+      "package.json",
+      "package-lock.json",
+      ".github/workflows/"
+    ]
+  },
+  "commands": {
+    "dev": "npm run dev",
+    "test": "npm test",
+    "build": "npm run build"
+  },
+  "evidence": {
+    "node": [
+      "package-lock.json",
+      "package.json"
+    ],
+    "ci": [
+      ".github/workflows/bdd-e2e.yml",
+      ".github/workflows/deploy-gh-pages.yml",
+      ".github/workflows/static.yml"
+    ]
+  },
+  "pack": {
+    "enabled": true,
+    "llms_format": "txt",
+    "output_dir": "docs/ai",
+    "files": []
+  }
+}

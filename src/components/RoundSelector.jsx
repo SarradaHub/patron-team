@@ -1,25 +1,51 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 /**
- * Exibe rodada ativa (sem criar novas). Múltiplas rodadas só por import legado.
+ * Exibe e renomeia a rodada ativa (sem criar novas).
+ * Múltiplas rodadas só por import legado.
  */
-export default function RoundSelector({ rounds, activeRoundId, onSelectRound }) {
+export default function RoundSelector({ rounds, activeRoundId, onSelectRound, onRenameRound }) {
   const active = rounds.find((r) => r.id === activeRoundId);
+  const [draft, setDraft] = useState(active?.name ?? '');
+
+  useEffect(() => {
+    setDraft(active?.name ?? '');
+  }, [active?.id, active?.name]);
+
+  const commit = () => {
+    if (!active || !onRenameRound) return;
+    if (draft.trim() === (active.name || '').trim()) return;
+    onRenameRound(active.id, draft);
+  };
+
+  const nameField = (
+    <div className="round-name-field">
+      <label htmlFor="round-name">Nome da rodada</label>
+      <input
+        id="round-name"
+        className="input-text"
+        data-testid="round-name-input"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {active?.createdAt && (
+        <p className="info-message subtle">{new Date(active.createdAt).toLocaleString('pt-BR')}</p>
+      )}
+    </div>
+  );
 
   if (rounds.length <= 1) {
     return (
       <div className="panel round-selector-panel" data-testid="round-panel">
         <h2>Rodada</h2>
-        <p className="info-message">
-          {active ? (
-            <>
-              <strong>{active.name}</strong>
-              <span className="subtle"> — {new Date(active.createdAt).toLocaleString('pt-BR')}</span>
-            </>
-          ) : (
-            'Carregando…'
-          )}
-        </p>
+        {active ? nameField : <p className="info-message">Carregando…</p>}
       </div>
     );
   }
@@ -43,6 +69,7 @@ export default function RoundSelector({ rounds, activeRoundId, onSelectRound }) 
           ))}
         </select>
       </div>
+      {nameField}
     </div>
   );
 }

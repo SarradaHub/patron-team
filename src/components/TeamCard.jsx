@@ -18,6 +18,7 @@ export default function TeamCard({
   team,
   allPlayers,
   label,
+  side,
   onToggleBlock,
   onEditTeam,
   onDeleteTeam,
@@ -47,7 +48,7 @@ export default function TeamCard({
     <div
       className={`team-card ${team.status === 'in_field' ? 'team-active' : 'team-waiting'} ${
         team.isBlocked ? 'team-blocked' : ''
-      }`}
+      } ${side === 'a' ? 'team-side-a' : ''} ${side === 'b' ? 'team-side-b' : ''}`}
     >
       <h3>
         {(team.displayName && team.displayName.trim()) || label || `Time`}{' '}
