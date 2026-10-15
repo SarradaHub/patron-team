@@ -12,22 +12,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/index.jsx"></script>
-    <script>
-      // Registrar Service Worker para PWA offline
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          // Base deve ser URL absoluta; '/' quebra o construtor URL em vários browsers
-          const baseTag = document.querySelector('base');
-          const base =
-            baseTag?.href ||
-            window.location.href;
-          const swUrl = new URL('sw.js', base).href;
-          navigator.serviceWorker.register(swUrl)
-            .then(reg => console.log('Service Worker registrado:', reg.scope))
-            .catch(err => console.error('Erro ao registrar SW:', err));
-        });
-      }
-    </script>
   </body>
 </html>
 

@@ -1,58 +1,81 @@
-/**
- * Service Worker para cache offline (PWA)
- * Estratégia: Cache First com fallback para rede
- */
+import { assetUrlsFromHtml } from './assetUrls.js';
 
-const CACHE_NAME = 'team-queue-v4';
-const URLS_TO_CACHE = [
-  './',
-  './index.html',
-  './manifest.json',
-];
+const CACHE_NAME = 'team-queue-v5';
+const SHELL = ['./', './index.html', './manifest.json'];
 
-// Instalação: cacheia recursos essenciais
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('Cache aberto, adicionando recursos...');
-      return cache.addAll(URLS_TO_CACHE);
-    })
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.addAll(SHELL);
+      const shell = await cache.match('./index.html');
+      const html = shell ? await shell.text() : '';
+      const assets = assetUrlsFromHtml(html);
+      if (assets.length > 0) await cache.addAll(assets);
+      await self.skipWaiting();
+    })()
   );
-  // Ativa imediatamente sem esperar abas antigas
-  self.skipWaiting();
 });
 
-// Ativação: limpa caches antigos
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      )
-    )
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+      );
+      await self.clients.claim();
+    })()
   );
-  self.clients.claim();
 });
 
-// Fetch: tenta cache primeiro, depois rede
+function isWorkerScript(url) {
+  return url.pathname.endsWith('/sw.js') || url.pathname.endsWith('/assetUrls.js');
+}
+
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        // Cacheia respostas válidas para futuras requisições
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
-        }
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
-        return response;
-      });
-    })
-  );
+  const { request } = event;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (isWorkerScript(url)) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirstNavigation(request));
+    return;
+  }
+
+  event.respondWith(cacheFirstAsset(request));
 });
 
+async function networkFirstNavigation(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (response && response.status === 200 && response.type === 'basic') {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return (await cache.match(request)) || (await cache.match('./index.html')) || offlineResponse();
+  }
+}
+
+async function cacheFirstAsset(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (response && response.status === 200 && response.type === 'basic') {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return offlineResponse();
+  }
+}
+
+function offlineResponse() {
+  return new Response('Offline', { status: 503, statusText: 'Offline' });
+}
