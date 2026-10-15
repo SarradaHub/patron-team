@@ -116,6 +116,20 @@ export default function PlayerStats({
     </>
   );
 
+  const sortColumns = [
+    { key: 'name', label: 'Jogador', byName: true },
+    ...(showWinDrawLoss
+      ? [
+          { key: 'wins', label: 'V' },
+          { key: 'draws', label: 'E' },
+          { key: 'losses', label: 'D' },
+        ]
+      : []),
+    { key: 'goals', label: 'Gols' },
+    { key: 'assists', label: 'Assist.' },
+    { key: 'total', label: 'Total' },
+  ];
+
   // Calcula totais gerais para o rodapé da tabela
   const totalGoals = players.reduce((sum, p) => sum + (p.goals || 0), 0);
   const totalAssists = players.reduce((sum, p) => sum + (p.assists || 0), 0);
@@ -150,6 +164,33 @@ export default function PlayerStats({
           </span>
         </p>
 
+        <label className="stats-sort">
+          Ordenar por
+          <select
+            aria-label="Ordenar por"
+            value={`${sortBy}:${sortDir}`}
+            onChange={(e) => {
+              const [column, dir] = e.target.value.split(':');
+              setSortBy(column);
+              setSortDir(dir);
+            }}
+          >
+            {sortColumns.map((col) =>
+              col.byName ? (
+                <React.Fragment key={col.key}>
+                  <option value={`${col.key}:asc`}>{col.label} (A–Z)</option>
+                  <option value={`${col.key}:desc`}>{col.label} (Z–A)</option>
+                </React.Fragment>
+              ) : (
+                <React.Fragment key={col.key}>
+                  <option value={`${col.key}:desc`}>{col.label} (maior primeiro)</option>
+                  <option value={`${col.key}:asc`}>{col.label} (menor primeiro)</option>
+                </React.Fragment>
+              )
+            )}
+          </select>
+        </label>
+
         {sortedPlayers.length === 0 ? (
           <p className="empty-message">
             {filterText
@@ -158,7 +199,7 @@ export default function PlayerStats({
           </p>
         ) : (
           <div className="stats-table-wrapper">
-            <table className="stats-table">
+            <table className="stats-table stats-table-cards">
               <thead>
                 <tr>
                   <th className="stats-th-rank">#</th>
@@ -222,19 +263,33 @@ export default function PlayerStats({
               <tbody>
                 {sortedPlayers.map((player, index) => (
                   <tr key={player.id} className={`stats-row status-row-${player.status}`}>
-                    <td className="stats-rank">{index + 1}</td>
+                    <td className="stats-rank" data-label="#">
+                      {index + 1}
+                    </td>
                     <td className="stats-name">{player.name}</td>
-                    <td className="stats-status">{statusLabel[player.status]}</td>
+                    <td className="stats-status" data-label="Status">
+                      {statusLabel[player.status]}
+                    </td>
                     {showWinDrawLoss && (
                       <>
-                        <td className="stats-value">{player.wins || 0}</td>
-                        <td className="stats-value">{player.draws || 0}</td>
-                        <td className="stats-value">{player.losses || 0}</td>
+                        <td className="stats-value" data-label="V">
+                          {player.wins || 0}
+                        </td>
+                        <td className="stats-value" data-label="E">
+                          {player.draws || 0}
+                        </td>
+                        <td className="stats-value" data-label="D">
+                          {player.losses || 0}
+                        </td>
                       </>
                     )}
-                    <td className="stats-value">{player.goals || 0}</td>
-                    <td className="stats-value">{player.assists || 0}</td>
-                    <td className="stats-value stats-total">
+                    <td className="stats-value" data-label="Gols">
+                      {player.goals || 0}
+                    </td>
+                    <td className="stats-value" data-label="Assist.">
+                      {player.assists || 0}
+                    </td>
+                    <td className="stats-value stats-total" data-label="Total">
                       {(player.goals || 0) + (player.assists || 0)}
                     </td>
                     <td className="stats-actions">

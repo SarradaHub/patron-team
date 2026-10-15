@@ -330,6 +330,12 @@ textarea {
   .btn:hover {
     transform: none;
   }
+
+  .match-list,
+  .player-list,
+  .teams-waiting-panel .teams-grid {
+    scroll-snap-type: none;
+  }
 }
 
 .btn:active {
@@ -485,10 +491,12 @@ textarea {
 
 .player-list {
   list-style: none;
-  max-height: 60vh;
-  overflow-y: auto;
   width: 100%;
   min-width: 0;
+  max-height: 85dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
 }
 
 .player-item {
@@ -503,7 +511,10 @@ textarea {
   background-color: var(--cor-surface-muted);
   transition: background-color 0.2s;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .player-item:hover {
@@ -542,6 +553,7 @@ textarea {
   color: var(--cor-texto);
   width: 100%;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .player-status {
@@ -556,6 +568,10 @@ textarea {
   margin-top: 4px;
   width: 100%;
   justify-content: flex-start;
+}
+
+.player-actions .btn {
+  min-height: 44px;
 }
 
 .btn-queue-icon {
@@ -608,6 +624,28 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.teams-waiting-panel .teams-grid {
+  min-width: 0;
+  max-height: 85dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+}
+
+.teams-waiting-panel .team-card {
+  min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.teams-waiting-panel .team-card h3 {
+  overflow-wrap: anywhere;
+}
+
+.teams-waiting-panel .team-card-actions .btn {
+  min-height: 44px;
 }
 
 .team-card {
@@ -682,17 +720,23 @@ textarea {
 /* ---------- Histórico de partidas ---------- */
 .match-list {
   list-style: none;
-  max-height: 30vh;
+  min-width: 0;
+  max-height: 85dvh;
+  overflow-x: hidden;
   overflow-y: auto;
+  scroll-snap-type: y mandatory;
 }
 
 .match-item {
   display: block;
+  min-width: 0;
   padding: 12px 14px;
   margin-bottom: 8px;
   border-radius: 6px;
   border-left: 4px solid transparent;
   background-color: var(--cor-surface-muted);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .match-card-stack {
@@ -755,6 +799,10 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.match-line-stats .btn {
+  min-height: 44px;
 }
 
 .match-line-result-outcome {
@@ -1124,14 +1172,6 @@ textarea {
     font-size: 16px;
   }
 
-  .player-list {
-    max-height: min(52vh, 520px);
-  }
-
-  .match-list {
-    max-height: min(36vh, 360px);
-  }
-
   /* Só times em campo: 2 colunas em larguras menores; próximos (sortable) seguem 1 coluna */
   .teams-grid-in-field {
     display: grid;
@@ -1186,10 +1226,117 @@ textarea {
     padding: 6px 8px;
   }
 
+  .app-tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
   .tab-btn {
     font-size: var(--tipo-ui);
     padding: 10px 12px;
     min-height: 44px;
+  }
+}
+
+.stats-sort {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .stats-sort {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .stats-sort select {
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 6px;
+    background: var(--cor-fundo-input);
+    color: inherit;
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .stats-table-wrapper:has(.stats-table-cards) {
+    overflow-x: visible;
+  }
+
+  .stats-table-cards {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .stats-table-cards thead {
+    display: none;
+  }
+
+  .stats-table-cards,
+  .stats-table-cards tbody,
+  .stats-table-cards tr,
+  .stats-table-cards td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .stats-table-cards tr {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 8px;
+  }
+
+  .stats-table-cards .stats-name {
+    order: 0;
+    font-weight: 700;
+    font-size: 1rem;
+  }
+
+  .stats-table-cards .stats-actions {
+    order: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    text-align: left;
+  }
+
+  .stats-table-cards td[data-label] {
+    order: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: none;
+    text-align: right;
+  }
+
+  .stats-table-cards td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--cor-texto-secundario);
+    text-align: left;
+  }
+
+  .stats-table-cards .stats-th-rank,
+  .stats-table-cards .stats-th-name,
+  .stats-table-cards .stats-th-status,
+  .stats-table-cards .stats-th-stat,
+  .stats-table-cards .stats-th-actions {
+    min-width: 0;
+    width: auto;
+    white-space: normal;
   }
 }
 
@@ -1517,6 +1664,19 @@ textarea {
   margin-bottom: 8px;
 }
 
+.round-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.round-name-field .input-text {
+  width: 100%;
+  flex: none;
+  min-width: 0;
+}
+
 .subtle {
   font-size: 0.85rem;
   color: var(--cor-texto-secundario);
@@ -1751,19 +1911,24 @@ textarea {
 .match-stats-modal-wide {
   display: flex;
   flex-direction: column;
-  max-width: min(1100px, 100vw);
-  max-height: 90vh;
+  max-width: min(1100px, 100%);
+  width: 100%;
+  max-height: calc(100dvh - 32px);
+  min-height: 0;
   overflow: hidden;
 }
 
 .match-stats-scroll {
-  overflow: visible;
+  overflow: auto;
   min-height: 0;
   flex: 1 1 auto;
+  overscroll-behavior: contain;
 }
 
 .match-stats-dock {
   flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--cor-borda);
@@ -1882,7 +2047,13 @@ textarea {
 }
 
 .match-stats-team-block .stats-table-wrapper {
-  overflow: visible;
+  overflow-x: auto;
+}
+
+@media (min-width: 769px) {
+  .match-stats-team-block .stats-table-wrapper {
+    overflow-x: clip;
+  }
 }
 
 .match-stats-mini-table {
@@ -1905,6 +2076,7 @@ textarea {
 .match-stats-stepper {
   justify-content: center;
   margin: 0;
+  max-width: 100%;
 }
 
 .match-stats-stepper .btn-stat-plus,
@@ -2012,6 +2184,7 @@ textarea {
 .match-line-team-slot--a,
 .match-line-team-slot--b {
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .match-line-vs {
