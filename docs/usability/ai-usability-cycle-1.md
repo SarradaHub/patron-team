@@ -189,16 +189,16 @@ No issue tracker is configured, so nothing was filed. Category is bug or enhance
 | Finding | Category | Severity | Effort | Cost |
 | --- | --- | --- | --- | --- |
 | Sair blanks the app (hooks after the early return in `App.jsx`) | bug | Critical | Small | 1 click, then a reload. Resolved: those hooks now run before the login return in `src/App.jsx`, so Sair renders the login form. |
-| Dark active tab 3.21:1 at 14px | bug | High | Small | Contrast. Keep 14px |
+| Dark active tab 3.21:1 at 14px | bug | High | Small | Contrast. Keep 14px. Resolved: the dark active tab uses its own `#1a7f37` fill. The 14px label stays. Shared green text tokens were left alone. |
 | Modal Escape, focus leak, no scroll lock | bug | High | Medium | +1 click to close, plus a keyboard loop |
 | Back leaves the app; paths are not sections | enhancement | High | Medium | One Back is a dead end |
 | Offline reload drops the controls while the title remains | bug | High | Medium | One reload |
-| Empty name is silent | bug | Medium | Small | 1 wasted click |
+| Empty name is silent | bug | Medium | Small | 1 wasted click. Resolved: empty Adicionar shows `Informe o nome do jogador.` next to the field. |
 | Lesão / Cansado / Sub do not follow the `substitute` flag | bug | Medium | Medium | One click does more than the Lesão label says |
 | Duplicate Editar / Excluir names | bug | Medium | Small | Hesitation before the first click |
 | Placeholder-only name and filter fields | bug | Medium | Small | No size change required. Add a visible label at the current size |
-| 13px checkbox; 34×44 stat buttons; 32px theme toggle | enhancement | Medium | Small | Touch. Do not shrink labels |
-| Input focus ring under 3:1 | bug | Medium | Small | Keep the 2px thickness. Darken the ring |
+| 13px checkbox; 34×44 stat buttons; 32px theme toggle | enhancement | Medium | Small | Touch. Do not shrink labels. Resolved: the checkbox row, stat buttons, and theme toggle now have a 44px hit area. Label sizes stay. |
+| Input focus ring under 3:1 | bug | Medium | Small | Keep the 2px thickness. Darken the ring. Resolved: the ring is a solid 2px, `#1a7f37` in light and `#2ea44f` in dark. |
 | Mixed alert / confirm / dialog | enhancement | Medium | Medium | Inconsistent recovery |
 | Zerar and duration save give no toast | enhancement | Low | Small | Zerar still changes the control |
 | Not present: new round, lock, rebalance, bulk, pagination, undo, command palette, session expiry, tiebreaker in this dataset | enhancement | Low | — | Inventory only. Not a defect by itself |
