@@ -122,11 +122,15 @@ export function openDB() {
         matchesGetAll.onsuccess = () => {
           for (const m of matchesGetAll.result) {
             m.roundId = roundId;
-            m.status = 'finalized';
-            m.draw = m.result === 'draw';
-            if (m.result === 'A_win') m.winningTeamId = m.teamA;
-            else if (m.result === 'B_win') m.winningTeamId = m.teamB;
-            else m.winningTeamId = null;
+            if (m.result == null) {
+              m.status = 'scheduled';
+            } else {
+              m.status = 'finalized';
+              m.draw = m.result === 'draw';
+              if (m.result === 'A_win') m.winningTeamId = m.teamA;
+              else if (m.result === 'B_win') m.winningTeamId = m.teamB;
+              else m.winningTeamId = null;
+            }
             matchesStore.put(m);
           }
         };
@@ -270,39 +274,52 @@ export async function addPlayer(name, { goalkeeperOnly = false } = {}) {
     throw new Error('Nome do jogador é obrigatório.');
   }
 
-  const existing = await getPlayers(true);
-  let joinedMs = Date.now();
-  if (existing.length > 0) {
-    const last = existing[existing.length - 1];
-    const lastMs = Date.parse(last.joinedAt);
-    if (!Number.isNaN(lastMs)) {
-      joinedMs = Math.max(joinedMs, lastMs + 1);
-    }
-  }
-
   const db = await openDB();
   const gkOnly = Boolean(goalkeeperOnly);
-  const player = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    status: 'available',
-    joinedAt: new Date(joinedMs).toISOString(),
-    goals: 0,
-    assists: 0,
-    preferGoalkeeper: gkOnly,
-    goalkeeperOnly: gkOnly,
-  };
-
   const tx = db.transaction('players', 'readwrite');
-  tx.objectStore('players').add(player);
+  const store = tx.objectStore('players');
 
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => {
-      notifyChange('player_added');
-      resolve(player);
+  const player = await new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
     };
-    tx.onerror = () => reject(tx.error);
+    const cursorReq = store.index('joinedAt').openCursor(null, 'prev');
+    cursorReq.onerror = () => fail(cursorReq.error);
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      let joinedMs = Date.now();
+      if (cursor?.value?.joinedAt) {
+        const lastMs = Date.parse(cursor.value.joinedAt);
+        if (!Number.isNaN(lastMs)) {
+          joinedMs = Math.max(joinedMs, lastMs + 1);
+        }
+      }
+      const created = {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        status: 'available',
+        joinedAt: new Date(joinedMs).toISOString(),
+        goals: 0,
+        assists: 0,
+        preferGoalkeeper: gkOnly,
+        goalkeeperOnly: gkOnly,
+      };
+      store.add(created);
+      tx.oncomplete = () => {
+        if (settled) return;
+        settled = true;
+        notifyChange('player_added');
+        resolve(created);
+      };
+    };
+    tx.onerror = () => fail(tx.error);
+    tx.onabort = () => fail(tx.error || new Error('Transação abortada.'));
   });
+
+  return player;
 }
 
 export async function getPlayers(orderByJoinedAt = true) {
