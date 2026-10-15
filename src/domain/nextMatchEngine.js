@@ -3,10 +3,7 @@
  * Heurística local: dois times em campo, não bloqueados, mais antigos primeiro.
  */
 
-function rosterMeetsTeamSize(team, teamSize) {
-  if (!teamSize || teamSize < 1) return true;
-  return (team?.players?.length ?? 0) >= teamSize;
-}
+import { rosterMeetsTeamSize } from './teamSize.js';
 
 /**
  * @param {object[]} teams - times da rodada (já filtrados por roundId)

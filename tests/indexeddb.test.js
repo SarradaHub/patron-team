@@ -213,7 +213,27 @@ describe('formTeam', () => {
 
   it('deve rejeitar tamanho inválido', async () => {
     const rid = await testRoundId();
-    await expect(formTeam(0, rid)).rejects.toThrow('Tamanho do time deve ser maior que zero');
+    await expect(formTeam(0, rid)).rejects.toThrow('Tamanho do time inválido');
+  });
+
+  it('formTeam recusa tamanho acima de 20 e não cria time', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 21; i += 1) {
+      await addPlayer(`Big${i}`);
+    }
+
+    await expect(formTeam(21, rid)).rejects.toThrow('Tamanho do time inválido');
+    expect(await getTeams(rid)).toHaveLength(0);
+  });
+
+  it('formTeam recusa tamanho quebrado e não cria time', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 5; i += 1) {
+      await addPlayer(`Frac${i}`);
+    }
+
+    await expect(formTeam(1.5, rid)).rejects.toThrow('Tamanho do time inválido');
+    expect(await getTeams(rid)).toHaveLength(0);
   });
 
   it('completa o time com fila + jogadores do time waiting (perdedor) até o size', async () => {
@@ -1552,6 +1572,66 @@ describe('finalizeMatch grava o próximo jogo na mesma transação', () => {
     expect(stored.scheduleSkipped).toBeUndefined();
     expect((await getMatches(rid)).filter((m) => m.status === 'scheduled')).toHaveLength(0);
     expect((await getTeams(rid)).find((t) => t.id === waiting.id).status).toBe('waiting');
+  });
+});
+
+describe('tamanho do time', () => {
+  async function twoFieldTeams() {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 10; i += 1) {
+      await addPlayer(`Tz${i}`);
+    }
+    const teamA = await formTeam(5, rid);
+    const teamB = await formTeam(5, rid);
+    return { rid, teamA, teamB };
+  }
+
+  it('scheduleMatch recusa tamanho 0 e não grava a partida', async () => {
+    const { rid, teamA, teamB } = await twoFieldTeams();
+
+    await expect(scheduleMatch(rid, teamA.id, teamB.id, { teamSize: 0 })).rejects.toThrow(
+      'Tamanho do time inválido'
+    );
+    expect(await getMatches(rid)).toHaveLength(0);
+  });
+
+  it('scheduleMatch recusa tamanho acima de 20 e não grava a partida', async () => {
+    const { rid, teamA, teamB } = await twoFieldTeams();
+
+    await expect(scheduleMatch(rid, teamA.id, teamB.id, { teamSize: 21 })).rejects.toThrow(
+      'Tamanho do time inválido'
+    );
+    expect(await getMatches(rid)).toHaveLength(0);
+  });
+
+  it('scheduleMatch recusa tamanho quebrado e não grava a partida', async () => {
+    const { rid, teamA, teamB } = await twoFieldTeams();
+
+    await expect(scheduleMatch(rid, teamA.id, teamB.id, { teamSize: 1.5 })).rejects.toThrow(
+      'Tamanho do time inválido'
+    );
+    expect(await getMatches(rid)).toHaveLength(0);
+  });
+
+  it('finalizeMatch recusa tamanho fora de 1 a 20 e não grava a partida', async () => {
+    const { rid, teamA, teamB } = await twoFieldTeams();
+    const match = await scheduleMatch(rid, teamA.id, teamB.id, { teamSize: 5 });
+
+    await expect(finalizeMatch(match.id, 'A_win', { teamSize: 0 })).rejects.toThrow(
+      'Tamanho do time inválido'
+    );
+    await expect(finalizeMatch(match.id, 'A_win', { teamSize: 21 })).rejects.toThrow(
+      'Tamanho do time inválido'
+    );
+    await expect(finalizeMatch(match.id, 'A_win', { teamSize: 1.5 })).rejects.toThrow(
+      'Tamanho do time inválido'
+    );
+
+    const matches = await getMatches(rid);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].id).toBe(match.id);
+    expect(matches[0].status).toBe('scheduled');
+    expect(matches[0].result).toBeNull();
   });
 });
 

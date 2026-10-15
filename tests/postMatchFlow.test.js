@@ -215,4 +215,28 @@ describe('planNextMatch', () => {
     expect(plan.type).toBe('none');
     expect(plan.reason).toBe('waiting_elenco_incompleto');
   });
+
+  it('não planeja a próxima partida quando o tamanho está fora de 1 a 20', () => {
+    const match = { teamA: 'A', teamB: 'B' };
+    const teams = [
+      mkTeam('W', 'waiting', [1], { enteredWaitingAt: '2018-01-01T00:00:00.000Z' }),
+      mkTeam('A', 'waiting', [2]),
+      mkTeam('B', 'waiting', [3]),
+    ];
+    const players = [
+      mkPlayer('10', 'available', '2020-01-01T00:00:00.000Z'),
+      mkPlayer('11', 'available', '2020-01-02T00:00:00.000Z'),
+    ];
+    const plan = planNextMatch({
+      roundId: rid,
+      match,
+      result: 'draw',
+      teams,
+      players,
+      teamSize: 0,
+      preWaitingTeamIds: ['W'],
+      tiebreakerWinnerTeamId: 'A',
+    });
+    expect(plan.type).toBe('none');
+  });
 });
