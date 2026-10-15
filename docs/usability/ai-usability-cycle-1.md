@@ -192,7 +192,7 @@ No issue tracker is configured, so nothing was filed. Category is bug or enhance
 | Dark active tab 3.21:1 at 14px | bug | High | Small | Contrast. Keep 14px. Resolved: the dark active tab uses its own `#1a7f37` fill. The 14px label stays. Shared green text tokens were left alone. |
 | Modal Escape, focus leak, no scroll lock | bug | High | Medium | +1 click to close, plus a keyboard loop. Resolved: a shared frame closes the top dialog on Escape, wraps Tab inside it, and locks page scroll while it is open. A confirm ignores the backdrop. |
 | Back leaves the app; paths are not sections | enhancement | High | Medium | One Back is a dead end |
-| Offline reload drops the controls while the title remains | bug | High | Medium | One reload |
+| Offline reload drops the controls while the title remains | bug | High | Medium | One reload. Resolved: the production worker caches the script and stylesheet with the shell. A reload offline still shows the queue controls. Dev no longer registers the worker. |
 | Empty name is silent | bug | Medium | Small | 1 wasted click. Resolved: empty Adicionar shows `Informe o nome do jogador.` next to the field. |
 | Lesão / Cansado / Sub do not follow the `substitute` flag | bug | Medium | Medium | One click does more than the Lesão label says |
 | Duplicate Editar / Excluir names | bug | Medium | Small | Hesitation before the first click |
