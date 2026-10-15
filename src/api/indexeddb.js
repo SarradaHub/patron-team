@@ -539,7 +539,7 @@ function joinedAtIsoEndOfQueueExcluding(playerMap, excludePlayerId) {
 function rejoinPlayersToQueuePreservingOrder(playerMap, playerIdsInOrder, startSlotMs) {
   let slot = startSlotMs;
   for (const pid of playerIdsInOrder || []) {
-    const p = playerMap[pid];
+    const p = playerMap[pid] ?? playerMap[String(pid)];
     if (!p) continue;
     p.status = 'available';
     p.joinedAt = new Date(slot).toISOString();
@@ -623,7 +623,7 @@ function rosterPlayerIdsSetForRound(allTeams, roundId) {
 /**
  * Após retirar o substituto do 1º waiting: cada time recebe o 1º disponível do elenco do seguinte
  * (ordem do card). O último waiting tenta receber o 1º da fila global fora de elenco; se não houver,
- * dissolve o último time da fila (jogadores voltam à fila com joinedAt atual), liberando o elenco.
+ * dissolve o último time da fila (jogadores voltam à fila na ordem do card), liberando o elenco.
  * @returns {Set<string>} ids de jogadores que precisam de playersStore.put após a cascata
  */
 function cascadeWaitingTeamsAfterFieldSubstitution(
@@ -632,8 +632,7 @@ function cascadeWaitingTeamsAfterFieldSubstitution(
   playerById,
   allPlayersArr,
   roundId,
-  subId,
-  nowIso
+  subId
 ) {
   const playersToPut = new Set();
 
@@ -674,14 +673,9 @@ function cascadeWaitingTeamsAfterFieldSubstitution(
   const freePick = freeCandidates[0];
   if (!freePick) {
     const victim = W[W.length - 1];
-    for (const pid of victim.players || []) {
-      const p = playerById[String(pid)];
-      if (p) {
-        p.status = 'available';
-        p.joinedAt = nowIso;
-        playersToPut.add(String(pid));
-      }
-    }
+    const ids = [...(victim.players || [])];
+    rejoinPlayersToQueuePreservingOrder(playerById, ids, nextRequeueSlotMs(playerById));
+    for (const pid of ids) playersToPut.add(String(pid));
     victim.players = [];
     return playersToPut;
   }
@@ -919,110 +913,6 @@ export async function formAllTeamsPossible(size, roundId) {
 }
 
 /**
- * Forma vários times de uma vez (mesma transação).
- */
-export async function formTeamsForRound(roundId, playersPerTeam, teamCount) {
-  if (!roundId) throw new Error('roundId é obrigatório.');
-  if (!playersPerTeam || playersPerTeam < 1) throw new Error('Jogadores por time inválido.');
-  if (!teamCount || teamCount < 1) throw new Error('Quantidade de times inválida.');
-
-  const need = playersPerTeam * teamCount;
-  const db = await openDB();
-  const tx = db.transaction(['players', 'teams', 'rounds'], 'readwrite');
-  const playersStore = tx.objectStore('players');
-  const teamsStore = tx.objectStore('teams');
-  const roundsStore = tx.objectStore('rounds');
-
-  return new Promise((resolve, reject) => {
-    const roundReq = roundsStore.get(roundId);
-    roundReq.onsuccess = () => {
-      if (!roundReq.result) {
-        tx.abort();
-        reject(new Error('Rodada não encontrada.'));
-        return;
-      }
-
-      const selected = [];
-      const index = playersStore.index('joinedAt');
-      const cursorReq = index.openCursor(null, 'next');
-
-      cursorReq.onsuccess = (event) => {
-        const cursor = event.target.result;
-          if (cursor && selected.length < need) {
-          const player = cursor.value;
-          if (player.status === 'available' && !isGoalkeeperOnlyPlayer(player)) {
-            selected.push(player.id);
-          }
-          cursor.continue();
-        } else {
-          if (selected.length < need) {
-            tx.abort();
-            reject(
-              new Error(
-                `Jogadores insuficientes para ${teamCount} times de ${playersPerTeam}. Necessário: ${need}, disponível: ${selected.length}.`
-              )
-            );
-            return;
-          }
-
-          const teamsSnapReq = teamsStore.index('roundId').getAll(roundId);
-          teamsSnapReq.onsuccess = () => {
-            const snap = teamsSnapReq.result || [];
-            let virtualInField = snap.filter((t) => t.status === 'in_field').length;
-            let wo = maxWaitingOrderForRound(snap, roundId);
-            const now = new Date().toISOString();
-
-            const playersMutReq = playersStore.getAll();
-            playersMutReq.onsuccess = () => {
-              const byId = Object.fromEntries(
-                (playersMutReq.result || []).map((p) => [p.id, { ...p }])
-              );
-              const created = [];
-              for (let t = 0; t < teamCount; t += 1) {
-                const slice = selected.slice(t * playersPerTeam, (t + 1) * playersPerTeam);
-                const asWaiting = virtualInField >= 2;
-                const team = {
-                  id: crypto.randomUUID(),
-                  roundId,
-                  players: slice,
-                  status: asWaiting ? 'waiting' : 'in_field',
-                  isBlocked: false,
-                  createdAt: now,
-                  ...(asWaiting && { enteredWaitingAt: now, waitingOrder: (wo += 1) }),
-                };
-                teamsStore.add(team);
-                created.push(team);
-                for (const pid of slice) {
-                  const pl = byId[pid];
-                  if (pl) pl.status = asWaiting ? 'available' : 'in_field';
-                }
-                if (!asWaiting) virtualInField += 1;
-              }
-
-              for (const pid of selected) {
-                const p = byId[pid];
-                if (p) playersStore.put(p);
-              }
-
-              tx.oncomplete = () => {
-                notifyChange('teams_formed_batch');
-                resolve(created);
-              };
-            };
-            playersMutReq.onerror = () => reject(playersMutReq.error);
-          };
-          teamsSnapReq.onerror = () => reject(teamsSnapReq.error);
-        }
-      };
-      cursorReq.onerror = () => reject(cursorReq.error);
-    };
-    roundReq.onerror = () => reject(roundReq.error);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error('Transação abortada.'));
-  });
-}
-
-/**
  * Redistribui jogadores entre times em campo não bloqueados da rodada (round-robin).
  */
 export async function rebalanceTeams(roundId, { activeTeamsOnly = true } = {}) {
@@ -1238,18 +1128,16 @@ export async function updateTeamRoster(teamId, nextPlayerIds, roundId, options =
               return;
             }
 
-            const nowIso = new Date().toISOString();
             const targetStatus = team.status === 'in_field' ? 'in_field' : 'available';
-
-            for (const pid of oldRoster) {
-              if (!seen.has(pid)) {
-                const p = playerMap[pid];
-                if (p) {
-                  p.status = 'available';
-                  p.joinedAt = nowIso;
-                  playersStore.put(p);
-                }
-              }
+            const removedIds = oldRoster.filter((pid) => !seen.has(pid));
+            rejoinPlayersToQueuePreservingOrder(
+              playerMap,
+              removedIds,
+              nextRequeueSlotMs(playerMap)
+            );
+            for (const pid of removedIds) {
+              const p = playerMap[pid] ?? playerMap[String(pid)];
+              if (p) playersStore.put(p);
             }
 
             for (const pid of nextPlayerIds) {
@@ -1478,7 +1366,6 @@ function applyInjuryOnWaitingTeamRoster({
   rosterTargetSize,
   playerMap,
   allPlayers,
-  nowIso,
   playersStore,
   teamsStore,
 }) {
@@ -1547,13 +1434,11 @@ function applyInjuryOnWaitingTeamRoster({
     .sort(sortPlayersByJoinedAtThenId);
   const freePick = freeCandidates[0];
   if (!freePick) {
-    for (const pid of last.players || []) {
-      const p = playerMap[String(pid)];
-      if (p) {
-        p.status = 'available';
-        p.joinedAt = nowIso;
-        playersStore.put(p);
-      }
+    const ids = [...(last.players || [])];
+    rejoinPlayersToQueuePreservingOrder(playerMap, ids, nextRequeueSlotMs(playerMap));
+    for (const pid of ids) {
+      const p = playerMap[pid] ?? playerMap[String(pid)];
+      if (p) playersStore.put(p);
     }
     last.players = [];
     teamsStore.delete(last.id);
@@ -1605,8 +1490,6 @@ export async function removePlayer(
   const teamsStore = tx.objectStore('teams');
 
   return new Promise((resolve, reject) => {
-    const nowIso = new Date().toISOString();
-
     const finishNoSub = () => {
       tx.oncomplete = () => {
         notifyChange('player_removed');
@@ -1708,7 +1591,6 @@ export async function removePlayer(
                 rosterTargetSize,
                 playerMap: pmap,
                 allPlayers: allPl,
-                nowIso,
                 playersStore,
                 teamsStore,
               });
@@ -1823,8 +1705,7 @@ export async function removePlayer(
                 playerMap,
                 allPlayers,
                 roundId,
-                subId,
-                nowIso
+                subId
               );
             } catch (cascadeErr) {
               tx.abort();
@@ -2205,256 +2086,114 @@ function addScheduledMatchInStore(matchesStore, roundId, teamAId, teamBId, times
 }
 
 /**
- * Aplica plano de próxima partida (promover times, criar time, agenda).
+ * Grava o plano de próxima partida nas stores já abertas.
+ * `byTeam` precisa ainda ter os times do resultado, mesmo que o store já os tenha apagado.
  */
-export async function applyPostMatchSchedule(roundId, finalizedMatch, result, options = {}) {
-  const teamSize = options.teamSize ?? 5;
-  const preWaitingTeamIds = options.preWaitingTeamIds ?? [];
-  const tiebreakerWinnerTeamId = options.tiebreakerWinnerTeamId ?? null;
+function applyNextMatchPlan({
+  plan,
+  roundId,
+  playerMap,
+  byTeam,
+  teamsStore,
+  playersStore,
+  matchesStore,
+  now,
+}) {
+  if (!plan || plan.type === 'none') return;
 
-  const teams = await getTeams(roundId);
-  const players = await getPlayers(false);
+  const putPlayer = (pid) => {
+    const p = playerMap[pid];
+    if (p) playersStore.put(p);
+  };
 
-  const plan = planNextMatch({
-    roundId,
-    match: finalizedMatch,
-    result,
-    teams,
-    players,
-    teamSize,
-    preWaitingTeamIds,
-    tiebreakerWinnerTeamId,
-  });
-
-  if (plan.type === 'none') {
-    return plan;
+  if (plan.type === 'schedule') {
+    const ta = byTeam[plan.teamAId];
+    const tb = byTeam[plan.teamBId];
+    if (!ta || !tb) throw new Error('Times do plano automático não encontrados.');
+    ta.status = 'in_field';
+    tb.status = 'in_field';
+    stripWaitingQueueFields(ta);
+    stripWaitingQueueFields(tb);
+    teamsStore.put(ta);
+    teamsStore.put(tb);
+    for (const pid of ta.players || []) {
+      const p = playerMap[pid];
+      if (p) p.status = 'in_field';
+      putPlayer(pid);
+    }
+    for (const pid of tb.players || []) {
+      const p = playerMap[pid];
+      if (p) p.status = 'in_field';
+      putPlayer(pid);
+    }
+    addScheduledMatchInStore(matchesStore, roundId, plan.teamAId, plan.teamBId, now);
+    return;
   }
 
-  const db = await openDB();
-  const now = new Date().toISOString();
-
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(['teams', 'players', 'matches'], 'readwrite');
-    const teamsStore = tx.objectStore('teams');
-    const playersStore = tx.objectStore('players');
-    const matchesStore = tx.objectStore('matches');
-
-    const allT = teamsStore.getAll();
-    allT.onsuccess = () => {
-      const teamList = allT.result || [];
-      const allP = playersStore.getAll();
-      allP.onsuccess = () => {
-        try {
-          const playerMap = Object.fromEntries((allP.result || []).map((p) => [p.id, { ...p }]));
-          const byTeam = Object.fromEntries(teamList.map((t) => [t.id, { ...t }]));
-
-          if (plan.type === 'schedule') {
-            const ta = byTeam[plan.teamAId];
-            const tb = byTeam[plan.teamBId];
-            if (!ta || !tb) throw new Error('Times do plano automático não encontrados.');
-            ta.status = 'in_field';
-            tb.status = 'in_field';
-            stripWaitingQueueFields(ta);
-            stripWaitingQueueFields(tb);
-            teamsStore.put(ta);
-            teamsStore.put(tb);
-            for (const pid of ta.players || []) {
-              const p = playerMap[pid];
-              if (p) {
-                p.status = 'in_field';
-                playersStore.put(p);
-              }
-            }
-            for (const pid of tb.players || []) {
-              const p = playerMap[pid];
-              if (p) {
-                p.status = 'in_field';
-                playersStore.put(p);
-              }
-            }
-            addScheduledMatchInStore(matchesStore, roundId, plan.teamAId, plan.teamBId, now);
-          } else if (plan.type === 'resize_waiting_schedule') {
-            const wt = byTeam[plan.waitingTeamId];
-            const win = byTeam[plan.winnerId];
-            if (!wt || !win) throw new Error('Times não encontrados para remontagem.');
-            wt.players = [...plan.mergedPlayerIds];
-            wt.status = 'in_field';
-            stripWaitingQueueFields(wt);
-            teamsStore.put(wt);
-            win.status = 'in_field';
-            stripWaitingQueueFields(win);
-            teamsStore.put(win);
-            const mergeStart = nextRequeueSlotMs(playerMap);
-            stampJoinedAtStagger(playerMap, plan.mergedPlayerIds, mergeStart);
-            for (const pid of wt.players) {
-              const p = playerMap[pid];
-              if (p) {
-                p.status = 'in_field';
-                playersStore.put(p);
-              }
-            }
-            addScheduledMatchInStore(matchesStore, roundId, plan.winnerId, plan.waitingTeamId, now);
-          } else if (plan.type === 'draw_one_waiting') {
-            const w = byTeam[plan.waitingTeamId];
-            if (!w) throw new Error('Time waiting não encontrado.');
-            const loserTeamId =
-              plan.match.teamA === plan.tiebreakerWinnerTeamId
-                ? plan.match.teamB
-                : plan.match.teamA;
-            const wT = byTeam[plan.tiebreakerWinnerTeamId];
-            const lT = byTeam[loserTeamId];
-            const earlierMs = Date.now() - 3_600_000;
-            let slotAfterWinners = stampJoinedAtStagger(playerMap, wT.players || [], earlierMs);
-            slotAfterWinners = Math.max(slotAfterWinners, Date.now());
-            stampJoinedAtStagger(playerMap, lT.players || [], slotAfterWinners);
-            for (const pid of [...(wT.players || []), ...(lT.players || [])]) {
-              const p = playerMap[pid];
-              if (p) playersStore.put(p);
-            }
-            const newTeam = {
-              id: crypto.randomUUID(),
-              roundId,
-              players: [...plan.newTeamPlayerIds],
-              status: 'in_field',
-              isBlocked: false,
-              createdAt: now,
-            };
-            teamsStore.add(newTeam);
-            w.status = 'in_field';
-            stripWaitingQueueFields(w);
-            teamsStore.put(w);
-            for (const pid of newTeam.players) {
-              const p = playerMap[pid];
-              if (p) {
-                p.status = 'in_field';
-                playersStore.put(p);
-              }
-            }
-            for (const pid of w.players || []) {
-              const p = playerMap[pid];
-              if (p) {
-                p.status = 'in_field';
-                playersStore.put(p);
-              }
-            }
-            addScheduledMatchInStore(matchesStore, roundId, w.id, newTeam.id, now);
-          } else {
-            throw new Error('Plano de pós-partida desconhecido.');
-          }
-
-          tx.oncomplete = () => {
-            notifyChange('post_match_schedule');
-            resolve(plan);
-          };
-        } catch (err) {
-          tx.abort();
-          reject(err);
-        }
-      };
-      allP.onerror = () => reject(allP.error);
-    };
-    allT.onerror = () => reject(allT.error);
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-/**
- * Registra partida finalizada na rodada.
- * Vitória: time perdedor é removido; jogadores voltam à fila (`available`, joinedAt atualizado).
- * Empate: ambos os times são removidos e os jogadores voltam à fila.
- * O time vencedor permanece no store (`in_field`). No empate, nenhum dos dois permanece como time.
- */
-export async function recordMatch(roundId, teamAId, teamBId, result) {
-  if (!['A_win', 'B_win', 'draw'].includes(result)) {
-    throw new Error("Resultado deve ser 'A_win', 'B_win' ou 'draw'.");
+  if (plan.type === 'resize_waiting_schedule') {
+    const wt = byTeam[plan.waitingTeamId];
+    const win = byTeam[plan.winnerId];
+    if (!wt || !win) throw new Error('Times não encontrados para remontagem.');
+    wt.players = [...plan.mergedPlayerIds];
+    wt.status = 'in_field';
+    stripWaitingQueueFields(wt);
+    teamsStore.put(wt);
+    win.status = 'in_field';
+    stripWaitingQueueFields(win);
+    teamsStore.put(win);
+    const mergeStart = nextRequeueSlotMs(playerMap);
+    stampJoinedAtStagger(playerMap, plan.mergedPlayerIds, mergeStart);
+    for (const pid of wt.players) {
+      const p = playerMap[pid];
+      if (p) p.status = 'in_field';
+      putPlayer(pid);
+    }
+    addScheduledMatchInStore(matchesStore, roundId, plan.winnerId, plan.waitingTeamId, now);
+    return;
   }
 
-  const db = await openDB();
-  const tx = db.transaction(['players', 'teams', 'matches'], 'readwrite');
-  const playersStore = tx.objectStore('players');
-  const teamsStore = tx.objectStore('teams');
-  const matchesStore = tx.objectStore('matches');
-  const now = new Date().toISOString();
-
-  return new Promise((resolve, reject) => {
-    const teamAReq = teamsStore.get(teamAId);
-    teamAReq.onsuccess = () => {
-      const teamA = teamAReq.result;
-      if (!teamA || teamA.roundId !== roundId) {
-        tx.abort();
-        reject(new Error('Time A não encontrado nesta rodada.'));
-        return;
-      }
-
-      const teamBReq = teamsStore.get(teamBId);
-      teamBReq.onsuccess = () => {
-        const teamB = teamBReq.result;
-        if (!teamB || teamB.roundId !== roundId) {
-          tx.abort();
-          reject(new Error('Time B não encontrado nesta rodada.'));
-          return;
-        }
-
-        const allP = playersStore.getAll();
-        allP.onsuccess = () => {
-          const playerMap = Object.fromEntries(allP.result.map((p) => [p.id, { ...p }]));
-
-          const dissolveTeamToPlayerQueue = (team, startSlotMs) => {
-            if (!team) return startSlotMs;
-            const nextSlot = rejoinPlayersToQueuePreservingOrder(
-              playerMap,
-              team.players || [],
-              startSlotMs
-            );
-            teamsStore.delete(team.id);
-            return nextSlot;
-          };
-
-          let requeueSlot = nextRequeueSlotMs(playerMap);
-          if (result === 'A_win') {
-            requeueSlot = dissolveTeamToPlayerQueue(teamB, requeueSlot);
-          } else if (result === 'B_win') {
-            requeueSlot = dissolveTeamToPlayerQueue(teamA, requeueSlot);
-          } else {
-            requeueSlot = dissolveTeamToPlayerQueue(teamA, requeueSlot);
-            requeueSlot = dissolveTeamToPlayerQueue(teamB, requeueSlot);
-          }
-
-          for (const p of Object.values(playerMap)) {
-            playersStore.put(p);
-          }
-
-          const match = enrichMatchRecord({
-            id: crypto.randomUUID(),
-            roundId,
-            teamA: teamAId,
-            teamB: teamBId,
-            rosterA: [...(teamA.players || [])],
-            rosterB: [...(teamB.players || [])],
-            result,
-            timestamp: now,
-            status: 'finalized',
-          });
-          matchesStore.add(match);
-
-          tx.oncomplete = () => {
-            notifyChange('match_recorded');
-            resolve(match);
-          };
-        };
-        allP.onerror = () => reject(allP.error);
-      };
-      teamBReq.onerror = () => reject(teamBReq.error);
+  if (plan.type === 'draw_one_waiting') {
+    const w = byTeam[plan.waitingTeamId];
+    if (!w) throw new Error('Time waiting não encontrado.');
+    const loserTeamId =
+      plan.match.teamA === plan.tiebreakerWinnerTeamId ? plan.match.teamB : plan.match.teamA;
+    const wT = byTeam[plan.tiebreakerWinnerTeamId];
+    const lT = byTeam[loserTeamId];
+    if (!wT || !lT) throw new Error('Times do desempate não encontrados.');
+    const earlierMs = Date.now() - 3_600_000;
+    let slotAfterWinners = stampJoinedAtStagger(playerMap, wT.players || [], earlierMs);
+    slotAfterWinners = Math.max(slotAfterWinners, Date.now());
+    stampJoinedAtStagger(playerMap, lT.players || [], slotAfterWinners);
+    for (const pid of [...(wT.players || []), ...(lT.players || [])]) putPlayer(pid);
+    const newTeam = {
+      id: crypto.randomUUID(),
+      roundId,
+      players: [...plan.newTeamPlayerIds],
+      status: 'in_field',
+      isBlocked: false,
+      createdAt: now,
     };
-    teamAReq.onerror = () => reject(teamAReq.error);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error('Transação abortada.'));
-  });
+    teamsStore.add(newTeam);
+    w.status = 'in_field';
+    stripWaitingQueueFields(w);
+    teamsStore.put(w);
+    for (const pid of newTeam.players) {
+      const p = playerMap[pid];
+      if (p) p.status = 'in_field';
+      putPlayer(pid);
+    }
+    for (const pid of w.players || []) {
+      const p = playerMap[pid];
+      if (p) p.status = 'in_field';
+      putPlayer(pid);
+    }
+    addScheduledMatchInStore(matchesStore, roundId, w.id, newTeam.id, now);
+    return;
+  }
+
+  throw new Error('Plano de pós-partida desconhecido.');
 }
 
-/**
- * Agenda partida sem resultado (para editar stats antes de finalizar).
- */
 export async function scheduleMatch(roundId, teamAId, teamBId, options = {}) {
   const teamSize = options.teamSize ?? 5;
   const db = await openDB();
@@ -2516,8 +2255,8 @@ export async function scheduleMatch(roundId, teamAId, teamBId, options = {}) {
 }
 
 /**
- * Finaliza partida agendada. Mesma regra de `recordMatch` para times: perdedor(es) dissolvido(s)
- * na fila de jogadores; vencedor permanece em campo. Depois roda `applyPostMatchSchedule` se houver plano.
+ * Finaliza partida agendada. O perdedor (ou os dois, no empate) volta para a fila.
+ * O próximo jogo é planejado com os times ainda no banco e gravado na mesma transação.
  * @param {object} [options] — { teamSize, tiebreakerWinnerTeamId } — empate com 1 waiting exige desempate.
  */
 export async function finalizeMatch(matchId, result, options = {}) {
@@ -2551,81 +2290,136 @@ export async function finalizeMatch(matchId, result, options = {}) {
   const now = new Date().toISOString();
 
   return new Promise((resolve, reject) => {
+    let abortReason = null;
+    const abortWith = (err) => {
+      abortReason = err;
+      try {
+        tx.abort();
+      } catch {
+        reject(err);
+      }
+    };
     const mReq = matchesStore.get(matchId);
     mReq.onsuccess = () => {
       const match = mReq.result;
       if (!match || match.status !== 'scheduled') {
-        tx.abort();
-        reject(new Error('Partida agendada não encontrada.'));
+        abortWith(new Error('Partida agendada não encontrada.'));
         return;
       }
 
-      const teamAReq = teamsStore.get(match.teamA);
-      teamAReq.onsuccess = () => {
-        const teamA = teamAReq.result;
-        const teamBReq = teamsStore.get(match.teamB);
-        teamBReq.onsuccess = () => {
-          const teamB = teamBReq.result;
-          const allP = playersStore.getAll();
+      const allP = playersStore.getAll();
           allP.onsuccess = () => {
-            const playerMap = Object.fromEntries(allP.result.map((p) => [p.id, { ...p }]));
+            const teamsReq = teamsStore.getAll();
+            teamsReq.onsuccess = () => {
+              try {
+                const playerMap = Object.fromEntries(allP.result.map((p) => [p.id, { ...p }]));
+                const teamList = (teamsReq.result || [])
+                  .filter((t) => t.roundId === roundId)
+                  .map((t) => ({ ...t, players: [...(t.players || [])] }));
+                const byTeam = Object.fromEntries(teamList.map((t) => [t.id, t]));
+                const liveA = byTeam[match.teamA];
+                const liveB = byTeam[match.teamB];
+                if (!liveA || !liveB) {
+                  abortWith(new Error('Times da partida não encontrados nesta rodada.'));
+                  return;
+                }
 
-            const dissolveTeamToPlayerQueue = (team, startSlotMs) => {
-              if (!team) return startSlotMs;
-              const nextSlot = rejoinPlayersToQueuePreservingOrder(
-                playerMap,
-                team.players || [],
-                startSlotMs
-              );
-              teamsStore.delete(team.id);
-              return nextSlot;
+                const playersArr = Object.values(playerMap);
+                const waitingNow = fifoPreWaitingTeamIds(teamList, roundId, playersArr, rosterSz);
+                const reservedOnWaiting = new Set(
+                  teamList
+                    .filter((t) => t.status === 'waiting')
+                    .flatMap((t) => t.players || [])
+                );
+                // Quem já está no time que espera não entra no time novo. O mapa real não muda.
+                const playersForPlan = playersArr.map((p) =>
+                  reservedOnWaiting.has(p.id) ? { ...p, status: 'in_field' } : p
+                );
+                if (
+                  result === 'draw' &&
+                  waitingNow.length === 1 &&
+                  !options.tiebreakerWinnerTeamId
+                ) {
+                  abortWith(new Error('REQUIRES_TIEBREAKER'));
+                  return;
+                }
+
+                const plan = planNextMatch({
+                  roundId,
+                  match: { teamA: match.teamA, teamB: match.teamB },
+                  result,
+                  teams: teamList,
+                  players: playersForPlan,
+                  teamSize: rosterSz,
+                  preWaitingTeamIds: waitingNow,
+                  tiebreakerWinnerTeamId: options.tiebreakerWinnerTeamId ?? null,
+                });
+
+                const dissolveTeamToPlayerQueue = (team, startSlotMs) => {
+                  if (!team) return startSlotMs;
+                  const nextSlot = rejoinPlayersToQueuePreservingOrder(
+                    playerMap,
+                    team.players || [],
+                    startSlotMs
+                  );
+                  teamsStore.delete(team.id);
+                  return nextSlot;
+                };
+
+                const rosterA = [...liveA.players];
+                const rosterB = [...liveB.players];
+                let requeueSlot = nextRequeueSlotMs(playerMap);
+                if (result === 'A_win') {
+                  requeueSlot = dissolveTeamToPlayerQueue(liveB, requeueSlot);
+                } else if (result === 'B_win') {
+                  requeueSlot = dissolveTeamToPlayerQueue(liveA, requeueSlot);
+                } else {
+                  requeueSlot = dissolveTeamToPlayerQueue(liveA, requeueSlot);
+                  requeueSlot = dissolveTeamToPlayerQueue(liveB, requeueSlot);
+                }
+
+                applyNextMatchPlan({
+                  plan,
+                  roundId,
+                  playerMap,
+                  byTeam,
+                  teamsStore,
+                  playersStore,
+                  matchesStore,
+                  now,
+                });
+
+                for (const p of Object.values(playerMap)) {
+                  playersStore.put(p);
+                }
+
+                match.result = result;
+                match.status = 'finalized';
+                match.rosterA = rosterA;
+                match.rosterB = rosterB;
+                Object.assign(match, enrichMatchRecord(match));
+                match.timestamp = now;
+                matchesStore.put({ ...match });
+                const returned = { ...match };
+                if (plan.type === 'none' && waitingNow.length > 0) {
+                  returned.scheduleSkipped = true;
+                }
+
+                tx.oncomplete = () => {
+                  notifyChange('match_finalized');
+                  resolve(returned);
+                };
+              } catch (err) {
+                abortWith(err);
+              }
             };
-
-            const rosterA = [...(teamA.players || [])];
-            const rosterB = [...(teamB.players || [])];
-
-            let requeueSlot = nextRequeueSlotMs(playerMap);
-            if (result === 'A_win') {
-              requeueSlot = dissolveTeamToPlayerQueue(teamB, requeueSlot);
-            } else if (result === 'B_win') {
-              requeueSlot = dissolveTeamToPlayerQueue(teamA, requeueSlot);
-            } else {
-              requeueSlot = dissolveTeamToPlayerQueue(teamA, requeueSlot);
-              requeueSlot = dissolveTeamToPlayerQueue(teamB, requeueSlot);
-            }
-
-            for (const p of Object.values(playerMap)) {
-              playersStore.put(p);
-            }
-
-            match.result = result;
-            match.status = 'finalized';
-            match.rosterA = rosterA;
-            match.rosterB = rosterB;
-            Object.assign(match, enrichMatchRecord(match));
-            match.timestamp = now;
-            matchesStore.put(match);
-
-            tx.oncomplete = () => {
-              notifyChange('match_finalized');
-              applyPostMatchSchedule(roundId, match, result, {
-                teamSize: rosterSz,
-                preWaitingTeamIds,
-                tiebreakerWinnerTeamId: options.tiebreakerWinnerTeamId ?? null,
-              })
-                .then(() => resolve(match))
-                .catch(reject);
-            };
+            teamsReq.onerror = () => reject(teamsReq.error);
           };
-          allP.onerror = () => reject(allP.error);
-        };
-        teamBReq.onerror = () => reject(teamBReq.error);
-      };
-      teamAReq.onerror = () => reject(teamAReq.error);
+      allP.onerror = () => reject(allP.error);
     };
     mReq.onerror = () => reject(mReq.error);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error('Transação abortada.'));
+    tx.onerror = () => reject(abortReason || tx.error);
+    tx.onabort = () => reject(abortReason || tx.error || new Error('Transação abortada.'));
   });
 }
 
@@ -3183,17 +2977,6 @@ export async function removeAssist(playerId) {
   });
 }
 
-export async function getPlayerStats() {
-  const players = await getPlayers(false);
-  return players.map((p) => ({
-    ...p,
-    goals: p.goals || 0,
-    assists: p.assists || 0,
-    preferGoalkeeper: Boolean(p.preferGoalkeeper),
-    goalkeeperOnly: Boolean(p.goalkeeperOnly),
-  }));
-}
-
 export async function runDatastoreMaintenance() {
   const db = await openDB();
   const readTx = db.transaction(['players', 'teams', 'matches', 'rounds', 'player_stats'], 'readonly');
@@ -3335,7 +3118,12 @@ export async function exportData() {
 }
 
 export async function importData(json) {
-  if (!json || !json.players || !json.teams || !json.matches) {
+  if (
+    !json ||
+    !Array.isArray(json.players) ||
+    !Array.isArray(json.teams) ||
+    !Array.isArray(json.matches)
+  ) {
     throw new Error('JSON inválido. Deve conter players, teams e matches.');
   }
 
@@ -3432,6 +3220,8 @@ export async function deleteDatabase() {
     const request = indexedDB.deleteDatabase(DB_NAME);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
-    request.onblocked = () => resolve();
+    request.onblocked = () => {
+      reject(new Error('A limpeza vai terminar quando as outras abas fecharem.'));
+    };
   });
 }

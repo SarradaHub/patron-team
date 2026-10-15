@@ -50,8 +50,7 @@
     ],
     "ci": [
       ".github/workflows/bdd-e2e.yml",
-      ".github/workflows/deploy-gh-pages.yml",
-      ".github/workflows/static.yml"
+      ".github/workflows/deploy-gh-pages.yml"
     ]
   },
   "pack": {

@@ -39,6 +39,7 @@ export default function Controls({
   const [addAsGoalkeeperOnly, setAddAsGoalkeeperOnly] = useState(false);
   const playerNameInputRef = useRef(null);
   const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
+  const [pendingImport, setPendingImport] = useState(null);
   const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState(false);
   const fileInputRef = useRef(null);
   const [minDraft, setMinDraft] = useState('10');
@@ -72,7 +73,7 @@ export default function Controls({
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target.result);
-        onImport(json);
+        setPendingImport(json);
       } catch {
         toast.error('Erro ao ler arquivo JSON. Verifique o formato.');
       }
@@ -345,8 +346,22 @@ export default function Controls({
           />
         </div>
         <p className="info-message subtle">
-          Remove dados do navegador (IndexedDB). Não apaga snapshots no Supabase.
+          Remove dados do navegador (IndexedDB). Não apaga o backup enviado para a nuvem.
         </p>
+        {pendingImport && (
+          <ConfirmDialog
+            title="Importar dados"
+            message={CLEAR_CACHE_CONFIRM_MESSAGE}
+            confirmLabel="Apagar dados locais"
+            cancelLabel="Cancelar"
+            onCancel={() => setPendingImport(null)}
+            onConfirm={() => {
+              const json = pendingImport;
+              setPendingImport(null);
+              onImport(json);
+            }}
+          />
+        )}
         {showClearCacheConfirm && (
           <ConfirmDialog
             title="Limpar cache local"

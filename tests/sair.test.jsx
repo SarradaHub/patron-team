@@ -20,7 +20,7 @@ function installMatchMedia() {
   });
 }
 
-describe('Sair', () => {
+describe('abertura', () => {
   let container;
   let root;
 
@@ -34,7 +34,7 @@ describe('Sair', () => {
     sessionStorage.clear();
   });
 
-  it('shows the login form instead of an empty document', async () => {
+  it('abre direto na fila, sem senha e sem Sair', async () => {
     installMatchMedia();
     sessionStorage.clear();
     container = document.createElement('div');
@@ -48,12 +48,8 @@ describe('Sair', () => {
     const sair = [...container.querySelectorAll('button')].find(
       (button) => button.textContent.trim() === 'Sair'
     );
-    expect(sair).toBeTruthy();
-
-    await act(async () => {
-      sair.click();
-    });
-
-    expect(container.querySelector('#login-user')).not.toBeNull();
+    expect(sair).toBeUndefined();
+    expect(container.querySelector('#login-user')).toBeNull();
+    expect(container.querySelector('[data-testid="tab-queue"]')).not.toBeNull();
   });
 });

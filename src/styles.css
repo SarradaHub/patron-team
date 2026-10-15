@@ -2329,3 +2329,16 @@ textarea {
   border: 0;
 }
 
+.rebalance-details {
+  margin-top: 0.75rem;
+}
+
+.rebalance-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.rebalance-details .btn {
+  margin-top: 0.5rem;
+}
+

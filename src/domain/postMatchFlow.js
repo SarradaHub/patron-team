@@ -41,7 +41,7 @@ export function availablePlayersFifo(players, playerIdsInRound) {
  * @param {number} ctx.teamSize
  * @param {string[]} ctx.preWaitingTeamIds — ids dos times waiting antes de finalizar (ordenados FIFO)
  * @param {string|null} ctx.tiebreakerWinnerTeamId — teamA | teamB se empate + 1 waiting pré
- * @returns {object} plano para applyPostMatchSchedule
+ * @returns {object} plano aplicado dentro de finalizeMatch
  */
 export function planNextMatch(ctx) {
   const { match, result, teams, players, teamSize, preWaitingTeamIds, tiebreakerWinnerTeamId } =
