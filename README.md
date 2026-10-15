@@ -25,7 +25,7 @@ O site publicado está em [paulogrell.github.io/patron-team](https://paulogrell.
 
 1. Em **Controles**, digite o nome e clique em **Adicionar**.
 2. Clique em **Formar todos os times possíveis**.
-3. Clique em **Agendar próxima partida** e, no card, grave **Time A venceu**, **Time B venceu** ou **Empate**.
+3. Clique em **Agendar próxima partida** e, no card, grave **Time A venceu**, **Time B venceu** ou **Empate**. O botão fica desligado enquanto já houver uma partida agendada.
 4. No time em campo, **Bloquear time** e **Desbloquear time** alternam na hora.
 5. Com pelo menos um time em campo, abra **Rebalancear**. O botão pede confirmação e fica desligado até haver dois times em campo desbloqueados.
 

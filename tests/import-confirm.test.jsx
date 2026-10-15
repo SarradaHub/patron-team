@@ -33,8 +33,12 @@ async function chooseFile(container, json) {
   Object.defineProperty(input, 'files', { configurable: true, value: [file] });
   await act(async () => {
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  for (let i = 0; i < 20 && !container.textContent.includes('Apagar todos os dados locais'); i += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
 }
 
 describe('importar dados', () => {

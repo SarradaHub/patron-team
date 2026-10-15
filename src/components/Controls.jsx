@@ -302,7 +302,7 @@ export default function Controls({
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!canAct}
+          disabled={!canAct || timerMatchOptions.length > 0}
           onClick={() => onScheduleNext()}
           data-testid="schedule-next-button"
         >

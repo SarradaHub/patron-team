@@ -47,12 +47,29 @@ import {
   getRoundStatistics,
   getGlobalPlayerStatistics,
   runDatastoreMaintenance,
-  reorderLinePlayersInQueueOrder,
+  rebalanceTeams,
+  toggleTeamBlocked,
 } from '../src/api/indexeddb.js';
 
 async function testRoundId() {
   await ensureDefaultActiveRound();
   return getActiveRoundId();
+}
+
+async function setTeamStatus(teamId, status) {
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('teams', 'readwrite');
+    const store = tx.objectStore('teams');
+    const req = store.get(teamId);
+    req.onsuccess = () => {
+      const team = req.result;
+      team.status = status;
+      store.put(team);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 // Limpa o banco antes de cada teste para isolamento
@@ -89,23 +106,6 @@ describe('addPlayer e getPlayers', () => {
     expect(players[2].name).toBe('Carla');
   });
 
-  it('reorderLinePlayersInQueueOrder inverte fila de linha e preserva slot do só-goleiro no merge', async () => {
-    await addPlayer('Alice');
-    await new Promise((r) => setTimeout(r, 5));
-    await addPlayer('Bruno');
-    await new Promise((r) => setTimeout(r, 5));
-    await addPlayer('Só GK', { goalkeeperOnly: true });
-
-    const before = await getPlayers(true);
-    expect(before.map((p) => p.name)).toEqual(['Alice', 'Bruno', 'Só GK']);
-
-    const line = before.filter((p) => !p.goalkeeperOnly);
-    await reorderLinePlayersInQueueOrder([line[1].id, line[0].id]);
-
-    const after = await getPlayers(true);
-    expect(after.map((p) => p.name)).toEqual(['Bruno', 'Alice', 'Só GK']);
-  });
-
   it('removePlayer sem roundId remove jogador dos elencos (evita lesionado ainda no time)', async () => {
     const rid = await testRoundId();
     for (let i = 1; i <= 9; i += 1) {
@@ -122,16 +122,6 @@ describe('addPlayer e getPlayers', () => {
     const teams = await getTeams(rid);
     expect(teams.every((t) => !(t.players || []).includes(vid))).toBe(true);
     expect((await getPlayers()).find((p) => p.id === vid).status).toBe('injured');
-  });
-
-  it('reorderLinePlayersInQueueOrder rejeita lista incompleta ou ID inválido', async () => {
-    await addPlayer('Um');
-    await addPlayer('Dois');
-    const [a, b] = await getPlayers(true);
-    await expect(reorderLinePlayersInQueueOrder([a.id])).rejects.toThrow(/quantidade/);
-    await expect(
-      reorderLinePlayersInQueueOrder([a.id, '00000000-0000-0000-0000-000000000000'])
-    ).rejects.toThrow(/fora da fila/);
   });
 
   it('deve atualizar perfil do jogador com flag de goleiro', async () => {
@@ -707,6 +697,42 @@ describe('updateTeamRoster', () => {
   });
 });
 
+describe('rebalanceTeams', () => {
+  it('mistura só os times em campo desbloqueados e mantém cada jogador em um time', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 15; i += 1) {
+      await addPlayer(`R${i}`);
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    const teamA = await formTeam(5, rid);
+    const teamB = await formTeam(5, rid);
+    const blocked = await formTeam(5, rid);
+    await setTeamStatus(blocked.id, 'in_field');
+    await toggleTeamBlocked(blocked.id);
+
+    const blockedRoster = [...blocked.players];
+    const pool = new Set([...teamA.players, ...teamB.players]);
+
+    await rebalanceTeams(rid);
+
+    const teams = await getTeams(rid);
+    const blockedAfter = teams.find((t) => t.id === blocked.id);
+    expect(blockedAfter.isBlocked).toBe(true);
+    expect(blockedAfter.players).toEqual(blockedRoster);
+
+    const seen = [];
+    for (const team of teams.filter((t) => t.id === teamA.id || t.id === teamB.id)) {
+      expect(team.players).toHaveLength(5);
+      for (const pid of team.players) {
+        expect(pool.has(pid)).toBe(true);
+        seen.push(pid);
+      }
+    }
+    expect(new Set(seen).size).toBe(pool.size);
+    expect(seen).toHaveLength(pool.size);
+  });
+});
+
 describe('partidas agendadas: updateScheduledMatchTeams e cancelScheduledMatch', () => {
   async function setupThreeTeamsScheduled() {
     const rid = await testRoundId();
@@ -720,6 +746,16 @@ describe('partidas agendadas: updateScheduledMatchTeams e cancelScheduledMatch',
     const match = await scheduleMatch(rid, t1.id, t2.id, { teamSize: 5 });
     return { rid, t1, t2, t3, match };
   }
+
+  it('não cria uma segunda partida agendada na mesma rodada', async () => {
+    const { rid, t1, t3, match } = await setupThreeTeamsScheduled();
+    await expect(scheduleMatch(rid, t1.id, t3.id, { teamSize: 5 })).rejects.toThrow(
+      'Já existe uma partida agendada nesta rodada.'
+    );
+    const scheduled = (await getMatches(rid)).filter((m) => m.status === 'scheduled');
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].id).toBe(match.id);
+  });
 
   it('updateScheduledMatchTeams troca times e remove stats rascunho', async () => {
     const { rid, t1, t2, t3, match } = await setupThreeTeamsScheduled();
@@ -1146,6 +1182,19 @@ describe('exportData e importData', () => {
     expect(players.map((p) => p.name)).toContain('Fica');
   });
 
+  it('não apaga o banco quando meta ou player_stats não é uma lista', async () => {
+    await addPlayer('Fica');
+    await expect(
+      importData({ players: [], teams: [], matches: [], meta: { key: 'x', value: 1 } })
+    ).rejects.toThrow('JSON inválido');
+    expect((await getPlayers()).map((p) => p.name)).toContain('Fica');
+
+    await expect(
+      importData({ players: [], teams: [], matches: [], player_stats: { id: 'x' } })
+    ).rejects.toThrow('JSON inválido');
+    expect((await getPlayers()).map((p) => p.name)).toContain('Fica');
+  });
+
   it('deve fazer roundtrip export → import', async () => {
     await addPlayer('RT1');
     await addPlayer('RT2');
@@ -1327,7 +1376,8 @@ describe('stress flow: alta carga com fadiga e substituição', () => {
       }
       expect(inField.length).toBeGreaterThanOrEqual(2);
 
-      const match = await scheduleMatch(rid, inField[0].id, inField[1].id, { teamSize });
+      const open = (await getMatches(rid)).find((m) => m.status === 'scheduled');
+      const match = open ?? (await scheduleMatch(rid, inField[0].id, inField[1].id, { teamSize }));
       const result = i % 5 === 0 ? 'draw' : i % 2 === 0 ? 'B_win' : 'A_win';
       await finalizeMatch(match.id, result, { teamSize });
 

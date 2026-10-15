@@ -10,10 +10,6 @@ import {
   replaceFieldPlayerWith,
   swapRosterPlayer,
   restorePlayerToAvailable,
-  recordGoal,
-  removeGoal,
-  recordAssist,
-  removeAssist,
   scheduleMatch,
   finalizeMatch,
   updatePlayerProfile,
@@ -221,6 +217,8 @@ export default function App() {
         const statRow = globalStatsByPlayerId[player.id] || {};
         return {
           ...player,
+          goals: statRow.goals || 0,
+          assists: statRow.assists || 0,
           wins: statRow.wins || 0,
           draws: statRow.draws || 0,
           losses: statRow.losses || 0,
@@ -486,42 +484,6 @@ export default function App() {
       await updatePlayerProfile(playerId, payload);
       toast.success('Jogador atualizado.');
       setEditPlayer(null);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRecordGoal = async (playerId) => {
-    try {
-      await recordGoal(playerId);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRemoveGoal = async (playerId) => {
-    try {
-      await removeGoal(playerId);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRecordAssist = async (playerId) => {
-    try {
-      await recordAssist(playerId);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRemoveAssist = async (playerId) => {
-    try {
-      await removeAssist(playerId);
       await refreshData();
     } catch (err) {
       toast.error(err.message);
@@ -980,14 +942,7 @@ export default function App() {
         </main>
       ) : (
         <main className="app-main-stats">
-          <PlayerStats
-            players={playersForGlobalStats}
-            onRecordGoal={handleRecordGoal}
-            onRemoveGoal={handleRemoveGoal}
-            onRecordAssist={handleRecordAssist}
-            onRemoveAssist={handleRemoveAssist}
-            showWinDrawLoss
-          />
+          <PlayerStats players={playersForGlobalStats} showWinDrawLoss />
         </main>
       )}
 

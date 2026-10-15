@@ -4,8 +4,8 @@
  * Database: teamQueueDB (versão 3)
  * Stores: players, teams, matches, rounds, meta, player_stats
  *
- * Política: totais em players.goals/assists são legados (import/export); stats oficiais por partida em player_stats.
- * Stats por partida ficam em player_stats; podem divergir até decidir sincronizar ao finalizar.
+ * Política: players.goals/assists ficam no registro para import/export.
+ * As telas leem os gols e assistências em player_stats.
  */
 
 import { validateMatchPlayerStats } from '../domain/playerStatRules.js';
@@ -17,10 +17,7 @@ import {
 } from '../domain/goalkeeperEligibility.js';
 import { suggestNextMatch as computeSuggestNextMatch } from '../domain/nextMatchEngine.js';
 import { planNextMatch } from '../domain/postMatchFlow.js';
-import {
-  compareWaitingTeamsQueueOrder,
-  sortWaitingTeamsForRound,
-} from '../domain/waitingQueueOrder.js';
+import { sortWaitingTeamsForRound } from '../domain/waitingQueueOrder.js';
 
 const DB_NAME = 'teamQueueDB';
 const DB_VERSION = 3;
@@ -381,92 +378,6 @@ export async function updatePlayerName(playerId, name) {
   return updatePlayerProfile(playerId, { name });
 }
 
-/**
- * Persist nova ordem da fila (aba "Fila de Jogadores", sem só-goleiro).
- * Reescreve joinedAt em sequência preservando posições relativas dos cadastros só-goleiro
- * na ordenação global.
- *
- * @param {string[]} newLinePlayerIdsInOrder — IDs na ordem desejada (mesmo conjunto que getPlayers filtrado !goalkeeperOnly)
- */
-/**
- * Persiste ordem manual da fila de times `waiting` (waitingOrder 1..n).
- * @param {string} roundId
- * @param {string[]} orderedWaitingTeamIds — permutação dos times waiting da rodada
- */
-export async function reorderWaitingTeamsInRound(roundId, orderedWaitingTeamIds) {
-  if (!roundId) throw new Error('Rodada obrigatória.');
-  const roundTeams = await getTeams(roundId);
-  const waiting = roundTeams.filter((t) => t.status === 'waiting');
-  if (orderedWaitingTeamIds.length !== waiting.length) {
-    throw new Error('Lista de times não confere com a fila de espera.');
-  }
-  const idSet = new Set(waiting.map((t) => t.id));
-  for (const id of orderedWaitingTeamIds) {
-    if (!idSet.has(id)) {
-      throw new Error('Time inválido na reordenação.');
-    }
-  }
-  const byId = Object.fromEntries(waiting.map((t) => [t.id, t]));
-  const db = await openDB();
-  const tx = db.transaction('teams', 'readwrite');
-  const store = tx.objectStore('teams');
-  orderedWaitingTeamIds.forEach((id, i) => {
-    const t = byId[id];
-    store.put({ ...t, waitingOrder: i + 1 });
-  });
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => {
-      notifyChange('waiting_teams_reordered');
-      resolve();
-    };
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-export async function reorderLinePlayersInQueueOrder(newLinePlayerIdsInOrder) {
-  const all = await getPlayers(true);
-  const linePlayers = all.filter((p) => !p.goalkeeperOnly);
-  const lineIdSet = new Set(linePlayers.map((p) => p.id));
-  if (newLinePlayerIdsInOrder.length !== lineIdSet.size) {
-    throw new Error('Ordem da fila inválida: quantidade de jogadores de linha não confere.');
-  }
-  for (const id of newLinePlayerIdsInOrder) {
-    if (!lineIdSet.has(id)) {
-      throw new Error('Ordem da fila inválida: ID fora da fila de linha.');
-    }
-  }
-  let u = 0;
-  const mergedIds = [];
-  for (const p of all) {
-    if (p.goalkeeperOnly) mergedIds.push(p.id);
-    else mergedIds.push(newLinePlayerIdsInOrder[u++]);
-  }
-
-  let baseMs = Infinity;
-  for (const p of all) {
-    const t = Date.parse(p.joinedAt);
-    if (!Number.isNaN(t)) baseMs = Math.min(baseMs, t);
-  }
-  if (!Number.isFinite(baseMs)) baseMs = Date.now();
-
-  const byId = Object.fromEntries(all.map((p) => [p.id, p]));
-  const db = await openDB();
-  const tx = db.transaction('players', 'readwrite');
-  const store = tx.objectStore('players');
-  mergedIds.forEach((id, i) => {
-    const p = byId[id];
-    store.put({ ...p, joinedAt: new Date(baseMs + i).toISOString() });
-  });
-
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => {
-      notifyChange('players_queue_reordered');
-      resolve();
-    };
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
 // ---------- Times ----------
 
 /**
@@ -681,11 +592,6 @@ function cascadeWaitingTeamsAfterFieldSubstitution(
   }
   last.players = [...(last.players || []), freePick.id];
   return playersToPut;
-}
-
-/** Sem snapshot de jogadores: cai no desempate por waitingOrder / datas. */
-export function sortWaitingTeamsByFifo(a, b) {
-  return compareWaitingTeamsQueueOrder(a, b, {}, null);
 }
 
 /** Maior `waitingOrder` entre times `waiting` da rodada (0 se nenhum). */
@@ -917,9 +823,8 @@ export async function formAllTeamsPossible(size, roundId) {
  */
 export async function rebalanceTeams(roundId, { activeTeamsOnly = true } = {}) {
   const db = await openDB();
-  const tx = db.transaction(['teams', 'players'], 'readwrite');
+  const tx = db.transaction('teams', 'readwrite');
   const teamsStore = tx.objectStore('teams');
-  const playersStore = tx.objectStore('players');
 
   return new Promise((resolve, reject) => {
     const idx = teamsStore.index('roundId');
@@ -2228,24 +2133,34 @@ export async function scheduleMatch(roundId, teamAId, teamBId, options = {}) {
           );
           return;
         }
-        const match = {
-          id: crypto.randomUUID(),
-          roundId,
-          teamA: teamAId,
-          teamB: teamBId,
-          result: null,
-          status: 'scheduled',
-          draw: false,
-          winningTeamId: null,
-          timestamp: now,
-          timerDurationMinutes: DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES,
-          countdownEndsAt: null,
+        const existingReq = matchesStore.index('roundId').getAll(roundId);
+        existingReq.onsuccess = () => {
+          const already = (existingReq.result || []).some((m) => m.status === 'scheduled');
+          if (already) {
+            tx.abort();
+            reject(new Error('Já existe uma partida agendada nesta rodada.'));
+            return;
+          }
+          const match = {
+            id: crypto.randomUUID(),
+            roundId,
+            teamA: teamAId,
+            teamB: teamBId,
+            result: null,
+            status: 'scheduled',
+            draw: false,
+            winningTeamId: null,
+            timestamp: now,
+            timerDurationMinutes: DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES,
+            countdownEndsAt: null,
+          };
+          matchesStore.add(match);
+          tx.oncomplete = () => {
+            notifyChange('match_scheduled');
+            resolve(match);
+          };
         };
-        matchesStore.add(match);
-        tx.oncomplete = () => {
-          notifyChange('match_scheduled');
-          resolve(match);
-        };
+        existingReq.onerror = () => reject(existingReq.error);
       };
       b.onerror = () => reject(b.error);
     };
@@ -2860,121 +2775,7 @@ export async function getGlobalPlayerStatistics() {
 
 export async function suggestNextMatchForRound(roundId, teamSize = 5) {
   const teams = await getTeams(roundId);
-  const matches = await getMatches(roundId);
-  const finalized = matches
-    .filter((m) => m.status === 'finalized' && m.result)
-    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  return computeSuggestNextMatch(teams, finalized, teamSize);
-}
-
-// ---------- Estatísticas globais (legado) ----------
-
-export async function recordGoal(playerId) {
-  const db = await openDB();
-  const tx = db.transaction('players', 'readwrite');
-  const store = tx.objectStore('players');
-
-  return new Promise((resolve, reject) => {
-    const getReq = store.get(playerId);
-    getReq.onsuccess = () => {
-      const player = getReq.result;
-      if (!player) {
-        tx.abort();
-        reject(new Error('Jogador não encontrado.'));
-        return;
-      }
-      player.goals = (player.goals || 0) + 1;
-      store.put(player);
-    };
-    tx.oncomplete = () => {
-      notifyChange('player_goal');
-      openDB().then((db2) => {
-        const tx2 = db2.transaction('players', 'readonly');
-        const r = tx2.objectStore('players').get(playerId);
-        r.onsuccess = () => resolve(r.result);
-        r.onerror = () => resolve(null);
-      });
-    };
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-export async function removeGoal(playerId) {
-  const db = await openDB();
-  const tx = db.transaction('players', 'readwrite');
-  const store = tx.objectStore('players');
-  return new Promise((resolve, reject) => {
-    store.get(playerId).onsuccess = (e) => {
-      const player = e.target.result;
-      if (!player) {
-        tx.abort();
-        reject(new Error('Jogador não encontrado.'));
-        return;
-      }
-      player.goals = Math.max(0, (player.goals || 0) - 1);
-      store.put(player);
-    };
-    tx.oncomplete = () => {
-      notifyChange('player_goal_removed');
-      openDB().then((db2) => {
-        const r = db2.transaction('players', 'readonly').objectStore('players').get(playerId);
-        r.onsuccess = () => resolve(r.result);
-      });
-    };
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-export async function recordAssist(playerId) {
-  const db = await openDB();
-  const tx = db.transaction('players', 'readwrite');
-  const store = tx.objectStore('players');
-  return new Promise((resolve, reject) => {
-    store.get(playerId).onsuccess = (e) => {
-      const player = e.target.result;
-      if (!player) {
-        tx.abort();
-        reject(new Error('Jogador não encontrado.'));
-        return;
-      }
-      player.assists = (player.assists || 0) + 1;
-      store.put(player);
-    };
-    tx.oncomplete = () => {
-      notifyChange('player_assist');
-      openDB().then((db2) => {
-        const r = db2.transaction('players', 'readonly').objectStore('players').get(playerId);
-        r.onsuccess = () => resolve(r.result);
-      });
-    };
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-export async function removeAssist(playerId) {
-  const db = await openDB();
-  const tx = db.transaction('players', 'readwrite');
-  const store = tx.objectStore('players');
-  return new Promise((resolve, reject) => {
-    store.get(playerId).onsuccess = (e) => {
-      const player = e.target.result;
-      if (!player) {
-        tx.abort();
-        reject(new Error('Jogador não encontrado.'));
-        return;
-      }
-      player.assists = Math.max(0, (player.assists || 0) - 1);
-      store.put(player);
-    };
-    tx.oncomplete = () => {
-      notifyChange('player_assist_removed');
-      openDB().then((db2) => {
-        const r = db2.transaction('players', 'readonly').objectStore('players').get(playerId);
-        r.onsuccess = () => resolve(r.result);
-      });
-    };
-    tx.onerror = () => reject(tx.error);
-  });
+  return computeSuggestNextMatch(teams, teamSize);
 }
 
 export async function runDatastoreMaintenance() {
@@ -3122,7 +2923,9 @@ export async function importData(json) {
     !json ||
     !Array.isArray(json.players) ||
     !Array.isArray(json.teams) ||
-    !Array.isArray(json.matches)
+    !Array.isArray(json.matches) ||
+    (json.meta != null && !Array.isArray(json.meta)) ||
+    (json.player_stats != null && !Array.isArray(json.player_stats))
   ) {
     throw new Error('JSON inválido. Deve conter players, teams e matches.');
   }

@@ -1,25 +1,12 @@
 import React, { useState, useMemo } from 'react';
 
 /**
- * PlayerStats — Módulo de estatísticas de jogadores.
- * Exibe uma tabela com todos os jogadores e seus gols e assistências,
- * com controles para incrementar/decrementar cada estatística.
+ * PlayerStats — totais de gols e assistências lidos de player_stats.
  *
  * @param {object} props
- * @param {Array} props.players - Lista de todos os jogadores
- * @param {function} props.onRecordGoal - Callback para registrar gol (playerId)
- * @param {function} props.onRemoveGoal - Callback para remover gol (playerId)
- * @param {function} props.onRecordAssist - Callback para registrar assistência (playerId)
- * @param {function} props.onRemoveAssist - Callback para remover assistência (playerId)
+ * @param {Array} props.players - Jogadores com goals/assists já somados
  */
-export default function PlayerStats({
-  players,
-  onRecordGoal,
-  onRemoveGoal,
-  onRecordAssist,
-  onRemoveAssist,
-  showWinDrawLoss = false,
-}) {
+export default function PlayerStats({ players, showWinDrawLoss = false }) {
   // Coluna e direção de ordenação
   const [sortBy, setSortBy] = useState('goals'); // 'name', 'goals', 'assists', 'total'
   const [sortDir, setSortDir] = useState('desc'); // 'asc' | 'desc'
@@ -261,7 +248,6 @@ export default function PlayerStats({
                   >
                     Total {sortCue('total')}
                   </th>
-                  <th className="stats-th-actions">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -295,48 +281,6 @@ export default function PlayerStats({
                     </td>
                     <td className="stats-value stats-total" data-label="Total">
                       {(player.goals || 0) + (player.assists || 0)}
-                    </td>
-                    <td className="stats-actions">
-                      <div className="stats-action-group">
-                        <button
-                          className="btn btn-sm btn-stat-minus"
-                          onClick={() => onRemoveGoal(player.id)}
-                          title="Remover gol"
-                          aria-label="Remover gol"
-                          disabled={(player.goals || 0) === 0}
-                        >
-                          -
-                        </button>
-                        <span className="stats-action-label">Gol</span>
-                        <button
-                          className="btn btn-sm btn-stat-plus"
-                          onClick={() => onRecordGoal(player.id)}
-                          title="Registrar gol"
-                          aria-label="Registrar gol"
-                        >
-                          +
-                        </button>
-                      </div>
-                      <div className="stats-action-group">
-                        <button
-                          className="btn btn-sm btn-stat-minus"
-                          onClick={() => onRemoveAssist(player.id)}
-                          title="Remover assistência"
-                          aria-label="Remover assistência"
-                          disabled={(player.assists || 0) === 0}
-                        >
-                          -
-                        </button>
-                        <span className="stats-action-label">Assist.</span>
-                        <button
-                          className="btn btn-sm btn-stat-plus"
-                          onClick={() => onRecordAssist(player.id)}
-                          title="Registrar assistência"
-                          aria-label="Registrar assistência"
-                        >
-                          +
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))}

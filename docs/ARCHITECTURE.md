@@ -208,22 +208,13 @@ App
 │   └── TeamCard + MatchHistory (+ modal MatchStatsModal)
 │
 ├── [Estatísticas globais]
-│   └── PlayerStats (totais em players.*)
+│   └── PlayerStats (gols e assistências somados de player_stats)
 │
 └── [Estatísticas da rodada]
     └── RoundStatistics (agregado via getRoundStatistics)
 ```
 
-### Estatísticas de Jogadores (recordGoal / recordAssist)
-
-```
-1. Abrir transação readwrite em [players]
-2. Buscar jogador por ID
-3. Incrementar player.goals (ou player.assists) em 1
-4. Atualizar registro com store.put(player)
-5. COMMIT
-6. Notificar outras abas via BroadcastChannel
-```
+Gols e assistências são gravados no card da partida (`bulkUpsertPlayerStats`). As duas abas de estatísticas leem `player_stats`.
 
 **Migrações:** v1 → stores base; v2 → `goals`/`assists` em players; v3 → `rounds`, `meta`, `player_stats`, índices `roundId`, rodada padrão “Importado” e backfill em times/partidas existentes.
 

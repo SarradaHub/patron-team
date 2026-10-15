@@ -46,7 +46,9 @@ describe('stress: churn', () => {
       await ensureTwoInField(getTeams, formTeam, rid, teamSize);
       const teams = await getTeams(rid);
       const inField = teams.filter((t) => t.status === 'in_field');
-      const match = await scheduleMatch(rid, inField[0].id, inField[1].id, { teamSize });
+      const open = (await getMatches(rid)).find((m) => m.status === 'scheduled');
+      const match =
+        open ?? (await scheduleMatch(rid, inField[0].id, inField[1].id, { teamSize }));
       const result = m % 3 === 0 ? 'draw' : m % 2 === 0 ? 'B_win' : 'A_win';
       await finalizeMatch(match.id, result, { teamSize });
 
