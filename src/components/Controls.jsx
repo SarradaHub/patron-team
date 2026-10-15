@@ -34,6 +34,7 @@ export default function Controls({
   onTimerClear,
 }) {
   const [playerName, setPlayerName] = useState('');
+  const [nameError, setNameError] = useState('');
   const [addAsGoalkeeperOnly, setAddAsGoalkeeperOnly] = useState(false);
   const playerNameInputRef = useRef(null);
   const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
@@ -50,12 +51,16 @@ export default function Controls({
 
   const handleAddPlayer = (e) => {
     e.preventDefault();
-    if (playerName.trim()) {
-      onAddPlayer(playerName.trim(), { goalkeeperOnly: addAsGoalkeeperOnly });
-      setPlayerName('');
-      setAddAsGoalkeeperOnly(false);
-      playerNameInputRef.current?.focus();
+    const name = playerName.trim();
+    if (!name) {
+      setNameError('Informe o nome do jogador.');
+      return;
     }
+    onAddPlayer(name, { goalkeeperOnly: addAsGoalkeeperOnly });
+    setPlayerName('');
+    setNameError('');
+    setAddAsGoalkeeperOnly(false);
+    playerNameInputRef.current?.focus();
   };
 
   const handleImportFile = (e) => {
@@ -111,10 +116,15 @@ export default function Controls({
             data-testid="add-player-input"
             ref={playerNameInputRef}
             value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
+            onChange={(e) => {
+              setPlayerName(e.target.value);
+              if (nameError) setNameError('');
+            }}
             placeholder="Nome do jogador..."
             className="input-text"
             autoFocus
+            aria-invalid={nameError ? 'true' : undefined}
+            aria-describedby={nameError ? 'add-player-error' : undefined}
           />
           <button
             type="submit"
@@ -125,6 +135,11 @@ export default function Controls({
             Adicionar
           </button>
         </form>
+        {nameError && (
+          <p id="add-player-error" className="field-error" role="alert">
+            {nameError}
+          </p>
+        )}
         <label className="modal-form-label modal-checkbox-row" htmlFor="add-player-gk-only">
           <input
             id="add-player-gk-only"
