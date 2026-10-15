@@ -122,11 +122,15 @@ export function openDB() {
         matchesGetAll.onsuccess = () => {
           for (const m of matchesGetAll.result) {
             m.roundId = roundId;
-            m.status = 'finalized';
-            m.draw = m.result === 'draw';
-            if (m.result === 'A_win') m.winningTeamId = m.teamA;
-            else if (m.result === 'B_win') m.winningTeamId = m.teamB;
-            else m.winningTeamId = null;
+            if (m.result == null) {
+              m.status = 'scheduled';
+            } else {
+              m.status = 'finalized';
+              m.draw = m.result === 'draw';
+              if (m.result === 'A_win') m.winningTeamId = m.teamA;
+              else if (m.result === 'B_win') m.winningTeamId = m.teamB;
+              else m.winningTeamId = null;
+            }
             matchesStore.put(m);
           }
         };
