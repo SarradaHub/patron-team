@@ -27,9 +27,7 @@ export function availablePlayersFifo(players, playerIdsInRound) {
   const byJoined = (a, b) => new Date(a.joinedAt) - new Date(b.joinedAt);
   const inR = players.filter((p) => inRound.has(p.id) && p.status === 'available').sort(byJoined);
   const outR = players.filter((p) => !inRound.has(p.id) && p.status === 'available').sort(byJoined);
-  const merged = [...inR, ...outR];
-  if (merged.length > 0) return merged;
-  return players.filter((p) => p.status === 'available').sort(byJoined);
+  return [...inR, ...outR];
 }
 
 /**
@@ -59,11 +57,16 @@ export function planNextMatch(ctx) {
 
   if (result === 'draw') {
     if (preWaitingCount === 1) {
-      const avail = availablePlayersFifo(players, playerIdsInRound);
-      if (avail.length < teamSize) {
+      const onWaitingRoster = new Set(
+        teams.filter((t) => t.status === 'waiting').flatMap((t) => t.players || []),
+      );
+      const freeQueue = availablePlayersFifo(players, playerIdsInRound).filter(
+        (p) => !onWaitingRoster.has(p.id),
+      );
+      if (freeQueue.length < teamSize) {
         return { type: 'none', reason: 'fila_insuficiente_empate_1_waiting' };
       }
-      const newPlayerIds = avail.slice(0, teamSize).map((p) => p.id);
+      const newPlayerIds = freeQueue.slice(0, teamSize).map((p) => p.id);
       const w = teams.find((t) => t.id === preWaitingTeamIds[0]);
       if (!w || w.status !== 'waiting') return { type: 'none', reason: 'sem_waiting' };
       if (!tiebreakerWinnerTeamId || ![match.teamA, match.teamB].includes(tiebreakerWinnerTeamId)) {

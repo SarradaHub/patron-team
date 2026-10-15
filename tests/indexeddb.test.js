@@ -9,7 +9,7 @@
  *   - exportData e importData
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   openDB,
   closeDB,
@@ -104,6 +104,24 @@ describe('addPlayer e getPlayers', () => {
     expect(players[0].name).toBe('Alice');
     expect(players[1].name).toBe('Bruno');
     expect(players[2].name).toBe('Carla');
+  });
+
+  it('dois adds sobrepostos mantêm o primeiro à frente do segundo na fila', async () => {
+    await openDB();
+    const now = Date.parse('2026-10-15T15:00:00.000Z');
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      const firstAdd = addPlayer('Ana');
+      const secondAdd = addPlayer('Bruno');
+      const [first, second] = await Promise.all([firstAdd, secondAdd]);
+
+      const players = await getPlayers(true);
+      expect(players.map((p) => p.name)).toEqual(['Ana', 'Bruno']);
+      expect(Date.parse(first.joinedAt)).toBe(now);
+      expect(Date.parse(second.joinedAt)).toBe(now + 1);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('removePlayer sem roundId remove jogador dos elencos (evita lesionado ainda no time)', async () => {
@@ -1534,6 +1552,80 @@ describe('finalizeMatch grava o próximo jogo na mesma transação', () => {
     expect(stored.scheduleSkipped).toBeUndefined();
     expect((await getMatches(rid)).filter((m) => m.status === 'scheduled')).toHaveLength(0);
     expect((await getTeams(rid)).find((t) => t.id === waiting.id).status).toBe('waiting');
+  });
+});
+
+describe('atualização para a versão 3', () => {
+  function seedDatabaseFromBeforeRounds(matches) {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('teamQueueDB', 2);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        const playersStore = db.createObjectStore('players', { keyPath: 'id' });
+        playersStore.createIndex('joinedAt', 'joinedAt', { unique: false });
+        playersStore.createIndex('status', 'status', { unique: false });
+        const teamsStore = db.createObjectStore('teams', { keyPath: 'id' });
+        teamsStore.createIndex('status', 'status', { unique: false });
+        db.createObjectStore('matches', { keyPath: 'id' });
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('matches', 'readwrite');
+        const store = tx.objectStore('matches');
+        for (const match of matches) store.add(match);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error);
+        };
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  it('partida sem resultado continua agendada', async () => {
+    await seedDatabaseFromBeforeRounds([
+      {
+        id: 'partida-aberta',
+        teamA: 'time-azul',
+        teamB: 'time-vermelho',
+        result: null,
+        timestamp: '2024-06-01T18:00:00.000Z',
+      },
+    ]);
+
+    const roundId = await getActiveRoundId();
+    const matches = await getMatches(roundId);
+    const open = matches.find((m) => m.id === 'partida-aberta');
+    expect(open.status).toBe('scheduled');
+    expect(open.result).toBeNull();
+  });
+
+  it('partida com resultado continua finalizada e mantém o vencedor', async () => {
+    await seedDatabaseFromBeforeRounds([
+      {
+        id: 'partida-fechada',
+        teamA: 'time-azul',
+        teamB: 'time-vermelho',
+        result: 'A_win',
+        timestamp: '2024-06-01T19:00:00.000Z',
+      },
+    ]);
+
+    const roundId = await getActiveRoundId();
+    const done = (await getMatches(roundId)).find((m) => m.id === 'partida-fechada');
+    expect(done.status).toBe('finalized');
+    expect(done.result).toBe('A_win');
+    expect(done.winningTeamId).toBe('time-azul');
+  });
+
+  it('instalação nova começa a noite vazia', async () => {
+    expect(await getPlayers()).toEqual([]);
+    expect(await getTeams()).toEqual([]);
+    expect(await getMatches()).toEqual([]);
   });
 });
 
