@@ -9,7 +9,7 @@
  *   - exportData e importData
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   openDB,
   closeDB,
@@ -104,6 +104,24 @@ describe('addPlayer e getPlayers', () => {
     expect(players[0].name).toBe('Alice');
     expect(players[1].name).toBe('Bruno');
     expect(players[2].name).toBe('Carla');
+  });
+
+  it('dois adds sobrepostos mantêm o primeiro à frente do segundo na fila', async () => {
+    await openDB();
+    const now = Date.parse('2026-10-15T15:00:00.000Z');
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      const firstAdd = addPlayer('Ana');
+      const secondAdd = addPlayer('Bruno');
+      const [first, second] = await Promise.all([firstAdd, secondAdd]);
+
+      const players = await getPlayers(true);
+      expect(players.map((p) => p.name)).toEqual(['Ana', 'Bruno']);
+      expect(Date.parse(first.joinedAt)).toBe(now);
+      expect(Date.parse(second.joinedAt)).toBe(now + 1);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('removePlayer sem roundId remove jogador dos elencos (evita lesionado ainda no time)', async () => {
