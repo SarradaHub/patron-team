@@ -10,11 +10,10 @@ function rosterMeetsTeamSize(team, teamSize) {
 
 /**
  * @param {object[]} teams - times da rodada (já filtrados por roundId)
- * @param {object[]} finalizedMatches - partidas com status === 'finalized', ordenadas por timestamp asc
  * @param {number} [teamSize=5] — jogadores mínimos por time (mesmo limite de “Formar time”)
  * @returns {{ ok: true, teamAId: string, teamBId: string } | { ok: false, error: string }}
  */
-export function suggestNextMatch(teams, finalizedMatches = [], teamSize = 5) {
+export function suggestNextMatch(teams, teamSize = 5) {
   const inField = teams
     .filter(
       (t) => t.status === 'in_field' && !t.isBlocked && rosterMeetsTeamSize(t, teamSize)
@@ -28,8 +27,6 @@ export function suggestNextMatch(teams, finalizedMatches = [], teamSize = 5) {
         'São necessários 2 times em campo (não bloqueados) com elenco completo para o limite de jogadores por time. Forme os times, ajuste o limite ou aguarde o fluxo da fila.',
     };
   }
-
-  void finalizedMatches;
 
   return {
     ok: true,

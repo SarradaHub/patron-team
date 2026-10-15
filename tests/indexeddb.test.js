@@ -5,7 +5,7 @@
  *   - addPlayer e getPlayers
  *   - formTeam (FIFO e atomicidade)
  *   - removePlayer (com e sem substituição)
- *   - recordMatch (vitória, derrota, empate)
+ *   - finalizeMatch (vitória, derrota, empate)
  *   - exportData e importData
  */
 
@@ -21,12 +21,10 @@ import {
   updateTeamRoster,
   formTeam,
   formAllTeamsPossible,
-  formTeamsForRound,
   removePlayer,
   replaceFieldPlayerWith,
   swapRosterPlayer,
   restorePlayerToAvailable,
-  recordMatch,
   getTeams,
   getMatches,
   scheduleMatch,
@@ -49,12 +47,29 @@ import {
   getRoundStatistics,
   getGlobalPlayerStatistics,
   runDatastoreMaintenance,
-  reorderLinePlayersInQueueOrder,
+  rebalanceTeams,
+  toggleTeamBlocked,
 } from '../src/api/indexeddb.js';
 
 async function testRoundId() {
   await ensureDefaultActiveRound();
   return getActiveRoundId();
+}
+
+async function setTeamStatus(teamId, status) {
+  const db = await openDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('teams', 'readwrite');
+    const store = tx.objectStore('teams');
+    const req = store.get(teamId);
+    req.onsuccess = () => {
+      const team = req.result;
+      team.status = status;
+      store.put(team);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 // Limpa o banco antes de cada teste para isolamento
@@ -91,23 +106,6 @@ describe('addPlayer e getPlayers', () => {
     expect(players[2].name).toBe('Carla');
   });
 
-  it('reorderLinePlayersInQueueOrder inverte fila de linha e preserva slot do só-goleiro no merge', async () => {
-    await addPlayer('Alice');
-    await new Promise((r) => setTimeout(r, 5));
-    await addPlayer('Bruno');
-    await new Promise((r) => setTimeout(r, 5));
-    await addPlayer('Só GK', { goalkeeperOnly: true });
-
-    const before = await getPlayers(true);
-    expect(before.map((p) => p.name)).toEqual(['Alice', 'Bruno', 'Só GK']);
-
-    const line = before.filter((p) => !p.goalkeeperOnly);
-    await reorderLinePlayersInQueueOrder([line[1].id, line[0].id]);
-
-    const after = await getPlayers(true);
-    expect(after.map((p) => p.name)).toEqual(['Bruno', 'Alice', 'Só GK']);
-  });
-
   it('removePlayer sem roundId remove jogador dos elencos (evita lesionado ainda no time)', async () => {
     const rid = await testRoundId();
     for (let i = 1; i <= 9; i += 1) {
@@ -124,16 +122,6 @@ describe('addPlayer e getPlayers', () => {
     const teams = await getTeams(rid);
     expect(teams.every((t) => !(t.players || []).includes(vid))).toBe(true);
     expect((await getPlayers()).find((p) => p.id === vid).status).toBe('injured');
-  });
-
-  it('reorderLinePlayersInQueueOrder rejeita lista incompleta ou ID inválido', async () => {
-    await addPlayer('Um');
-    await addPlayer('Dois');
-    const [a, b] = await getPlayers(true);
-    await expect(reorderLinePlayersInQueueOrder([a.id])).rejects.toThrow(/quantidade/);
-    await expect(
-      reorderLinePlayersInQueueOrder([a.id, '00000000-0000-0000-0000-000000000000'])
-    ).rejects.toThrow(/fora da fila/);
   });
 
   it('deve atualizar perfil do jogador com flag de goleiro', async () => {
@@ -218,7 +206,8 @@ describe('formTeam', () => {
     }
     const teamA = await formTeam(5, rid);
     const teamB = await formTeam(5, rid);
-    await recordMatch(rid, teamA.id, teamB.id, 'A_win');
+    const finished = await scheduleMatch(rid, teamA.id, teamB.id, { teamSize: 5 });
+    await finalizeMatch(finished.id, 'A_win', { teamSize: 5 });
 
     await addPlayer('N1');
     await new Promise((r) => setTimeout(r, 3));
@@ -300,10 +289,11 @@ describe('formTeam', () => {
     const t3 = await formTeam(5, rid);
     expect(t3.status).toBe('waiting');
 
-    await recordMatch(rid, t1.id, t2.id, 'A_win');
+    const finished = await scheduleMatch(rid, t1.id, t2.id, { teamSize: 5 });
+    await finalizeMatch(finished.id, 'A_win', { teamSize: 5 });
 
     const inFieldAfter = (await getTeams(rid)).filter((t) => t.status === 'in_field');
-    expect(inFieldAfter).toHaveLength(1);
+    expect(inFieldAfter).toHaveLength(2);
 
     const mid = await formTeam(5, rid);
     expect(mid.status).toBe('waiting');
@@ -329,21 +319,6 @@ describe('formAllTeamsPossible', () => {
     await expect(formAllTeamsPossible(5, rid)).rejects.toThrow(
       'Jogadores insuficientes para formar um time de 5. Necessário: 5, disponível: 1.'
     );
-  });
-});
-
-describe('formTeamsForRound', () => {
-  it('deve formar múltiplos times na mesma transação', async () => {
-    const rid = await testRoundId();
-    for (let i = 0; i < 6; i += 1) {
-      await addPlayer(`J${i}`);
-      await new Promise((r) => setTimeout(r, 5));
-    }
-    const teams = await formTeamsForRound(rid, 3, 2);
-    expect(teams).toHaveLength(2);
-    expect(teams[0].players).toHaveLength(3);
-    expect(teams[1].players).toHaveLength(3);
-    expect(teams[0].roundId).toBe(rid);
   });
 });
 
@@ -688,6 +663,23 @@ describe('updateTeamRoster', () => {
     expect(outP.status).toBe('available');
   });
 
+  it('dois jogadores removidos do elenco voltam à fila na ordem do card', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 5; i += 1) {
+      await addPlayer(`O${i}`);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const team = await formTeam(5, rid);
+    const [first, second, ...keep] = team.players;
+    await updateTeamRoster(team.id, keep, rid, { teamSize: 5 });
+    const players = await getPlayers(false);
+    const a = players.find((p) => p.id === first);
+    const b = players.find((p) => p.id === second);
+    expect(a.status).toBe('available');
+    expect(b.status).toBe('available');
+    expect(new Date(a.joinedAt).getTime()).toBeLessThan(new Date(b.joinedAt).getTime());
+  });
+
   it('deve rejeitar jogador que já está em outro time', async () => {
     const rid = await testRoundId();
     for (let i = 1; i <= 10; i += 1) {
@@ -705,6 +697,42 @@ describe('updateTeamRoster', () => {
   });
 });
 
+describe('rebalanceTeams', () => {
+  it('mistura só os times em campo desbloqueados e mantém cada jogador em um time', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 15; i += 1) {
+      await addPlayer(`R${i}`);
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    const teamA = await formTeam(5, rid);
+    const teamB = await formTeam(5, rid);
+    const blocked = await formTeam(5, rid);
+    await setTeamStatus(blocked.id, 'in_field');
+    await toggleTeamBlocked(blocked.id);
+
+    const blockedRoster = [...blocked.players];
+    const pool = new Set([...teamA.players, ...teamB.players]);
+
+    await rebalanceTeams(rid);
+
+    const teams = await getTeams(rid);
+    const blockedAfter = teams.find((t) => t.id === blocked.id);
+    expect(blockedAfter.isBlocked).toBe(true);
+    expect(blockedAfter.players).toEqual(blockedRoster);
+
+    const seen = [];
+    for (const team of teams.filter((t) => t.id === teamA.id || t.id === teamB.id)) {
+      expect(team.players).toHaveLength(5);
+      for (const pid of team.players) {
+        expect(pool.has(pid)).toBe(true);
+        seen.push(pid);
+      }
+    }
+    expect(new Set(seen).size).toBe(pool.size);
+    expect(seen).toHaveLength(pool.size);
+  });
+});
+
 describe('partidas agendadas: updateScheduledMatchTeams e cancelScheduledMatch', () => {
   async function setupThreeTeamsScheduled() {
     const rid = await testRoundId();
@@ -718,6 +746,16 @@ describe('partidas agendadas: updateScheduledMatchTeams e cancelScheduledMatch',
     const match = await scheduleMatch(rid, t1.id, t2.id, { teamSize: 5 });
     return { rid, t1, t2, t3, match };
   }
+
+  it('não cria uma segunda partida agendada na mesma rodada', async () => {
+    const { rid, t1, t3, match } = await setupThreeTeamsScheduled();
+    await expect(scheduleMatch(rid, t1.id, t3.id, { teamSize: 5 })).rejects.toThrow(
+      'Já existe uma partida agendada nesta rodada.'
+    );
+    const scheduled = (await getMatches(rid)).filter((m) => m.status === 'scheduled');
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].id).toBe(match.id);
+  });
 
   it('updateScheduledMatchTeams troca times e remove stats rascunho', async () => {
     const { rid, t1, t2, t3, match } = await setupThreeTeamsScheduled();
@@ -1057,7 +1095,7 @@ describe('goleiro externo', () => {
   });
 });
 
-describe('recordMatch', () => {
+describe('finalizeMatch devolve o perdedor na ordem do elenco', () => {
   it('perdedor volta à fila com joinedAt na ordem do elenco (FIFO estável)', async () => {
     const rid = await testRoundId();
     for (let i = 1; i <= 10; i += 1) {
@@ -1067,78 +1105,14 @@ describe('recordMatch', () => {
     const teamA = await formTeam(5, rid);
     const teamB = await formTeam(5, rid);
     const orderB = [...teamB.players];
-    await recordMatch(rid, teamA.id, teamB.id, 'A_win');
+    const match = await scheduleMatch(rid, teamA.id, teamB.id, { teamSize: 5 });
+    await finalizeMatch(match.id, 'A_win', { teamSize: 5 });
     const players = await getPlayers(true);
     const byId = Object.fromEntries(players.map((p) => [p.id, p]));
     const times = orderB.map((id) => Date.parse(byId[id].joinedAt));
     for (let i = 1; i < times.length; i += 1) {
       expect(times[i]).toBeGreaterThan(times[i - 1]);
     }
-  });
-
-  async function setupTwoTeams() {
-    const rid = await testRoundId();
-    for (let i = 1; i <= 10; i++) {
-      await addPlayer(`P${i}`);
-      await new Promise((r) => setTimeout(r, 5));
-    }
-    const teamA = await formTeam(5, rid);
-    const teamB = await formTeam(5, rid);
-    return { teamA, teamB, rid };
-  }
-
-  it('deve registrar vitória do Time A e dissolver Time B na fila de jogadores', async () => {
-    const { teamA, teamB, rid } = await setupTwoTeams();
-
-    const match = await recordMatch(rid, teamA.id, teamB.id, 'A_win');
-    expect(match).toBeDefined();
-    expect(match.result).toBe('A_win');
-
-    const teams = await getTeams(rid);
-    expect(teams.find((t) => t.id === teamB.id)).toBeUndefined();
-    const winner = teams.find((t) => t.id === teamA.id);
-    expect(winner).toBeDefined();
-    expect(winner.status).toBe('in_field');
-
-    const players = await getPlayers();
-    for (const pid of teamB.players) {
-      const p = players.find((pl) => pl.id === pid);
-      expect(p.status).toBe('available');
-    }
-  });
-
-  it('deve registrar vitória do Time B e dissolver Time A na fila de jogadores', async () => {
-    const { teamA, teamB, rid } = await setupTwoTeams();
-
-    await recordMatch(rid, teamA.id, teamB.id, 'B_win');
-
-    const teams = await getTeams(rid);
-    expect(teams.find((t) => t.id === teamA.id)).toBeUndefined();
-    expect(teams.find((t) => t.id === teamB.id)?.status).toBe('in_field');
-  });
-
-  it('deve tratar empate dissolvendo ambos os times na fila de jogadores', async () => {
-    const { teamA, teamB, rid } = await setupTwoTeams();
-
-    await recordMatch(rid, teamA.id, teamB.id, 'draw');
-
-    const teams = await getTeams(rid);
-    expect(teams.find((t) => t.id === teamA.id)).toBeUndefined();
-    expect(teams.find((t) => t.id === teamB.id)).toBeUndefined();
-  });
-
-  it('deve rejeitar resultado inválido', async () => {
-    const rid = await testRoundId();
-    await expect(recordMatch(rid, 'a', 'b', 'invalid')).rejects.toThrow(
-      "Resultado deve ser 'A_win', 'B_win' ou 'draw'"
-    );
-  });
-
-  it('deve rejeitar time inexistente', async () => {
-    const rid = await testRoundId();
-    await expect(recordMatch(rid, 'inexistente', 'outro', 'A_win')).rejects.toThrow(
-      'Time A não encontrado nesta rodada'
-    );
   });
 });
 
@@ -1197,6 +1171,28 @@ describe('exportData e importData', () => {
   it('deve rejeitar JSON inválido', async () => {
     await expect(importData({})).rejects.toThrow('JSON inválido');
     await expect(importData(null)).rejects.toThrow('JSON inválido');
+  });
+
+  it('não apaga o banco quando players não é uma lista', async () => {
+    await addPlayer('Fica');
+    await expect(importData({ players: {}, teams: [], matches: [] })).rejects.toThrow(
+      'JSON inválido'
+    );
+    const players = await getPlayers();
+    expect(players.map((p) => p.name)).toContain('Fica');
+  });
+
+  it('não apaga o banco quando meta ou player_stats não é uma lista', async () => {
+    await addPlayer('Fica');
+    await expect(
+      importData({ players: [], teams: [], matches: [], meta: { key: 'x', value: 1 } })
+    ).rejects.toThrow('JSON inválido');
+    expect((await getPlayers()).map((p) => p.name)).toContain('Fica');
+
+    await expect(
+      importData({ players: [], teams: [], matches: [], player_stats: { id: 'x' } })
+    ).rejects.toThrow('JSON inválido');
+    expect((await getPlayers()).map((p) => p.name)).toContain('Fica');
   });
 
   it('deve fazer roundtrip export → import', async () => {
@@ -1380,7 +1376,8 @@ describe('stress flow: alta carga com fadiga e substituição', () => {
       }
       expect(inField.length).toBeGreaterThanOrEqual(2);
 
-      const match = await scheduleMatch(rid, inField[0].id, inField[1].id, { teamSize });
+      const open = (await getMatches(rid)).find((m) => m.status === 'scheduled');
+      const match = open ?? (await scheduleMatch(rid, inField[0].id, inField[1].id, { teamSize }));
       const result = i % 5 === 0 ? 'draw' : i % 2 === 0 ? 'B_win' : 'A_win';
       await finalizeMatch(match.id, result, { teamSize });
 
@@ -1434,6 +1431,109 @@ describe('updateRoundName', () => {
 
   it('rejeita rodada inexistente', async () => {
     await expect(updateRoundName('no-such-round', 'Nome')).rejects.toThrow('Rodada não encontrada.');
+  });
+});
+
+describe('finalizeMatch grava o próximo jogo na mesma transação', () => {
+  it('empate com um time waiting e desempate forma o time da fila e agenda', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 20; i += 1) {
+      await addPlayer(`D${i}`);
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    const fieldA = await formTeam(5, rid);
+    const fieldB = await formTeam(5, rid);
+    const waiting = await formTeam(5, rid);
+    expect(waiting.status).toBe('waiting');
+    const queueIds = (await getPlayers(false))
+      .filter((p) => !fieldA.players.includes(p.id) && !fieldB.players.includes(p.id) && !waiting.players.includes(p.id))
+      .map((p) => p.id);
+    expect(queueIds).toHaveLength(5);
+
+    const match = await scheduleMatch(rid, fieldA.id, fieldB.id, { teamSize: 5 });
+    const saved = await finalizeMatch(match.id, 'draw', {
+      teamSize: 5,
+      tiebreakerWinnerTeamId: fieldA.id,
+    });
+
+    expect(saved.status).toBe('finalized');
+    expect(saved.result).toBe('draw');
+    const teams = await getTeams(rid);
+    expect(teams.find((t) => t.id === fieldA.id)).toBeUndefined();
+    expect(teams.find((t) => t.id === fieldB.id)).toBeUndefined();
+    const waitingAfter = teams.find((t) => t.id === waiting.id);
+    expect(waitingAfter.status).toBe('in_field');
+    const created = teams.find((t) => t.id !== waiting.id);
+    expect(created.status).toBe('in_field');
+    expect([...created.players].sort()).toEqual([...queueIds].sort());
+
+    const matches = await getMatches(rid);
+    const scheduled = matches.filter((m) => m.status === 'scheduled');
+    expect(scheduled).toHaveLength(1);
+    expect([scheduled[0].teamA, scheduled[0].teamB].sort()).toEqual([waiting.id, created.id].sort());
+
+    const players = await getPlayers(false);
+    const winnerJoined = players
+      .filter((p) => fieldA.players.includes(p.id))
+      .map((p) => new Date(p.joinedAt).getTime());
+    const loserJoined = players
+      .filter((p) => fieldB.players.includes(p.id))
+      .map((p) => new Date(p.joinedAt).getTime());
+    expect(Math.max(...winnerJoined)).toBeLessThan(Math.min(...loserJoined));
+    expect(Math.min(...loserJoined) - Math.max(...winnerJoined)).toBeGreaterThan(3_000_000);
+  });
+
+  it('vitória contra um único time waiting curto agenda o próximo jogo', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 15; i += 1) {
+      await addPlayer(`V${i}`);
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    const fieldA = await formTeam(5, rid);
+    const fieldB = await formTeam(5, rid);
+    const waiting = await formTeam(5, rid);
+    const shortRoster = waiting.players.slice(0, 3);
+    await updateTeamRoster(waiting.id, shortRoster, rid, { teamSize: 5 });
+
+    const match = await scheduleMatch(rid, fieldA.id, fieldB.id, { teamSize: 5 });
+    await finalizeMatch(match.id, 'A_win', { teamSize: 5 });
+
+    const teams = await getTeams(rid);
+    expect(teams.find((t) => t.id === fieldB.id)).toBeUndefined();
+    const winner = teams.find((t) => t.id === fieldA.id);
+    const waitingAfter = teams.find((t) => t.id === waiting.id);
+    expect(winner.status).toBe('in_field');
+    expect(waitingAfter.status).toBe('in_field');
+    expect(waitingAfter.players).toHaveLength(5);
+
+    const matches = await getMatches(rid);
+    expect(matches.find((m) => m.id === match.id).status).toBe('finalized');
+    const scheduled = matches.filter((m) => m.status === 'scheduled');
+    expect(scheduled).toHaveLength(1);
+    expect([scheduled[0].teamA, scheduled[0].teamB].sort()).toEqual(
+      [fieldA.id, waiting.id].sort()
+    );
+  });
+
+  it('empate sem gente livre não cria a próxima partida e não grava o aviso', async () => {
+    const rid = await testRoundId();
+    for (let i = 1; i <= 15; i += 1) {
+      await addPlayer(`S${i}`);
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    const fieldA = await formTeam(5, rid);
+    const fieldB = await formTeam(5, rid);
+    const waiting = await formTeam(5, rid);
+    const match = await scheduleMatch(rid, fieldA.id, fieldB.id, { teamSize: 5 });
+    const saved = await finalizeMatch(match.id, 'draw', {
+      teamSize: 5,
+      tiebreakerWinnerTeamId: fieldA.id,
+    });
+    expect(saved.scheduleSkipped).toBe(true);
+    const stored = (await getMatches(rid)).find((m) => m.id === match.id);
+    expect(stored.scheduleSkipped).toBeUndefined();
+    expect((await getMatches(rid)).filter((m) => m.status === 'scheduled')).toHaveLength(0);
+    expect((await getTeams(rid)).find((t) => t.id === waiting.id).status).toBe('waiting');
   });
 });
 

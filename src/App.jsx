@@ -10,10 +10,6 @@ import {
   replaceFieldPlayerWith,
   swapRosterPlayer,
   restorePlayerToAvailable,
-  recordGoal,
-  removeGoal,
-  recordAssist,
-  removeAssist,
   scheduleMatch,
   finalizeMatch,
   updatePlayerProfile,
@@ -39,6 +35,8 @@ import {
   getMatchScoresForRound,
   listPreWaitingTeamIds,
   runDatastoreMaintenance,
+  toggleTeamBlocked,
+  rebalanceTeams,
   setScheduledMatchTimerDuration,
   startScheduledMatchCountdown,
   clearScheduledMatchCountdown,
@@ -53,7 +51,6 @@ import GoalkeeperQueuePanel from './components/GoalkeeperQueuePanel.jsx';
 import TeamCard from './components/TeamCard.jsx';
 import MatchHistory from './components/MatchHistory.jsx';
 import Controls from './components/Controls.jsx';
-import LoginScreen from './components/LoginScreen.jsx';
 import RoundSelector from './components/RoundSelector.jsx';
 import RoundStatistics from './components/RoundStatistics.jsx';
 import PlayerStats from './components/PlayerStats.jsx';
@@ -66,8 +63,15 @@ import SubstitutePicker from './components/SubstitutePicker.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import MatchCountdownBanner from './components/MatchCountdownBanner.jsx';
-import { isAuthenticated, clearSession } from './auth/auth.js';
 import './styles.css';
+
+function toastFinalized(saved) {
+  toast.success(
+    saved?.scheduleSkipped
+      ? 'Partida finalizada. A próxima partida não foi criada.'
+      : 'Partida finalizada.'
+  );
+}
 
 const TOAST_OPTIONS = {
   className: 'app-toast',
@@ -80,7 +84,6 @@ const TOAST_OPTIONS = {
 };
 
 export default function App() {
-  const [autenticado, setAutenticado] = useState(isAuthenticated());
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -103,21 +106,12 @@ export default function App() {
   const [timerTargetMatchId, setTimerTargetMatchId] = useState(null);
   const timerExpiredRef = useRef(new Set());
 
-  const handleLogin = () => setAutenticado(true);
-
-  const handleLogout = () => {
-    clearSession();
-    setAutenticado(false);
-  };
-
   useEffect(() => {
-    if (!autenticado) return undefined;
     const id = setInterval(() => setClockNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [autenticado]);
+  }, []);
 
   useEffect(() => {
-    if (!autenticado) return;
     if (!activeRoundId) {
       setTimerTargetMatchId(null);
       return;
@@ -136,10 +130,9 @@ export default function App() {
       }
       return null;
     });
-  }, [autenticado, activeRoundId, matches]);
+  }, [activeRoundId, matches]);
 
   useEffect(() => {
-    if (!autenticado) return;
     for (const m of matches) {
       if (m.status !== 'scheduled' || !m.countdownEndsAt) {
         timerExpiredRef.current.delete(m.id);
@@ -151,7 +144,7 @@ export default function App() {
         toast('Tempo esgotado.', { icon: '⏱️' });
       }
     }
-  }, [autenticado, matches, clockNow]);
+  }, [matches, clockNow]);
 
   const refreshData = useCallback(async () => {
     try {
@@ -181,13 +174,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!autenticado) return undefined;
     refreshData();
     const unsubscribe = onChange(() => {
       refreshData();
     });
     return unsubscribe;
-  }, [autenticado, refreshData]);
+  }, [refreshData]);
 
   const handleTimerMatchPick = useCallback((matchId) => {
     setTimerTargetMatchId(matchId || null);
@@ -225,6 +217,8 @@ export default function App() {
         const statRow = globalStatsByPlayerId[player.id] || {};
         return {
           ...player,
+          goals: statRow.goals || 0,
+          assists: statRow.assists || 0,
           wins: statRow.wins || 0,
           draws: statRow.draws || 0,
           losses: statRow.losses || 0,
@@ -301,16 +295,6 @@ export default function App() {
     return n;
   }, [activeRoundId, teams, players]);
 
-  if (!autenticado) {
-    return (
-      <>
-        <Toaster position="top-right" toastOptions={TOAST_OPTIONS} />
-        <ThemeToggle className="login-theme-toggle" />
-        <LoginScreen onLogin={handleLogin} />
-      </>
-    );
-  }
-
   const handleSelectRound = async (roundId) => {
     try {
       await setActiveRoundId(roundId);
@@ -378,8 +362,8 @@ export default function App() {
 
   const handleFinalizeScheduled = async (matchId, result, tiebreakerWinnerTeamId = null) => {
     try {
-      await finalizeMatch(matchId, result, { teamSize, tiebreakerWinnerTeamId });
-      toast.success('Partida finalizada.');
+      const saved = await finalizeMatch(matchId, result, { teamSize, tiebreakerWinnerTeamId });
+      toastFinalized(saved);
       await refreshData();
     } catch (err) {
       toast.error(err.message);
@@ -403,11 +387,11 @@ export default function App() {
   const handleTiebreakerPick = async (winnerTeamId) => {
     if (!drawTiebreakerMatch) return;
     try {
-      await finalizeMatch(drawTiebreakerMatch.id, 'draw', {
+      const saved = await finalizeMatch(drawTiebreakerMatch.id, 'draw', {
         teamSize,
         tiebreakerWinnerTeamId: winnerTeamId,
       });
-      toast.success('Partida finalizada.');
+      toastFinalized(saved);
       setDrawTiebreakerMatch(null);
       await refreshData();
     } catch (err) {
@@ -506,42 +490,6 @@ export default function App() {
     }
   };
 
-  const handleRecordGoal = async (playerId) => {
-    try {
-      await recordGoal(playerId);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRemoveGoal = async (playerId) => {
-    try {
-      await removeGoal(playerId);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRecordAssist = async (playerId) => {
-    try {
-      await recordAssist(playerId);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRemoveAssist = async (playerId) => {
-    try {
-      await removeAssist(playerId);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
   const handleRunMaintenance = async () => {
     try {
       const summary = await runDatastoreMaintenance();
@@ -581,6 +529,15 @@ export default function App() {
       await updateScheduledMatchTeams(matchId, teamAId, teamBId, { teamSize });
       toast.success('Times da partida atualizados.');
       setEditMatch(null);
+      await refreshData();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleToggleBlock = async (teamId) => {
+    try {
+      await toggleTeamBlocked(teamId);
       await refreshData();
     } catch (err) {
       toast.error(err.message);
@@ -714,7 +671,7 @@ export default function App() {
       if (result?.duplicate) {
         toast.success('Exportação já registrada (idempotente).');
       } else {
-        toast.success('Dados enviados para Supabase!');
+        toast.success('Dados enviados para a nuvem!');
       }
     } catch (err) {
       console.error('handleExport:', err);
@@ -782,9 +739,6 @@ export default function App() {
 
       <div className="app-top-bar">
         <ThemeToggle />
-        <button className="btn btn-outline btn-sm" onClick={handleLogout} title="Sair" type="button">
-          Sair
-        </button>
       </div>
 
       <RoundSelector
@@ -931,9 +885,37 @@ export default function App() {
                         setEditTeamDefaultLabel(lbl);
                       }}
                       onDeleteTeam={handleDeleteTeam}
+                      onToggleBlock={handleToggleBlock}
                     />
                   ))}
                 </div>
+              )}
+              {teamsInField.length > 0 && (
+                <details className="rebalance-details">
+                  <summary>Rebalancear</summary>
+                  <p className="info-message subtle">
+                    Mistura os jogadores dos times em campo que não estão bloqueados.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    disabled={teamsInField.filter((t) => !t.isBlocked).length < 2}
+                    onClick={() =>
+                      setPendingConfirm({
+                        title: 'Rebalancear',
+                        message:
+                          'Redistribuir os jogadores dos times em campo que não estão bloqueados?',
+                        run: async () => {
+                          await rebalanceTeams(activeRoundId);
+                          toast.success('Times rebalanceados.');
+                          await refreshData();
+                        },
+                      })
+                    }
+                  >
+                    Rebalancear
+                  </button>
+                </details>
               )}
             </div>
             <div className="panel teams-panel teams-waiting-panel" data-testid="teams-waiting-panel">
@@ -960,14 +942,7 @@ export default function App() {
         </main>
       ) : (
         <main className="app-main-stats">
-          <PlayerStats
-            players={playersForGlobalStats}
-            onRecordGoal={handleRecordGoal}
-            onRemoveGoal={handleRemoveGoal}
-            onRecordAssist={handleRecordAssist}
-            onRemoveAssist={handleRemoveAssist}
-            showWinDrawLoss
-          />
+          <PlayerStats players={playersForGlobalStats} showWinDrawLoss />
         </main>
       )}
 

@@ -141,47 +141,14 @@ com IndexedDB como persistência local e BroadcastChannel para sincronização e
 
 **Garantia de atomicidade:** Se qualquer passo falhar, a transação inteira é revertida e nenhum jogador é marcado como `in_field`.
 
-### formTeamsForRound / rebalanceTeams
+### rebalanceTeams
 
-- **formTeamsForRound:** uma transação seleciona `teamCount * playersPerTeam` jogadores FIFO e cria N times com o mesmo `roundId`.
-- **rebalanceTeams(roundId, { activeTeamsOnly }):** coleta jogadores dos times `in_field` (opcionalmente só não bloqueados), ordena times por `createdAt`, redistribui em round-robin e grava os elencos.
-
-### recordMatch(roundId, teamAId, teamBId, result)
-
-```
-1. Abrir transação readwrite em [players, teams, matches]
-2. Buscar teamA e teamB; validar roundId
-3. Carregar todos os players (getAll), aplicar regras de fila em memória, gravar puts
-4. Conforme resultado:
-
-   SE result === 'A_win':
-     - teamB.status = 'waiting'
-     - Para cada jogador do teamB:
-       - player.status = 'available'
-       - player.joinedAt = now  (vai para fim da fila)
-
-   SE result === 'B_win':
-     - teamA.status = 'waiting'
-     - Para cada jogador do teamA:
-       - player.status = 'available'
-       - player.joinedAt = now
-
-   SE result === 'draw':
-     - teamA.status = 'waiting'
-     - teamB.status = 'waiting'
-     - Para cada jogador de ambos:
-       - player.status = 'available'
-       - player.joinedAt = now
-
-5. Criar registro de match finalizado (status `finalized`, winningTeamId, draw)
-6. Inserir match na store 'matches'
-7. COMMIT
-```
+- **rebalanceTeams(roundId, { activeTeamsOnly }):** coleta jogadores dos times `in_field` (opcionalmente só não bloqueados), ordena times por `createdAt`, redistribui em round-robin e grava os elencos. A tela não chama esta função.
 
 ### scheduleMatch / finalizeMatch
 
 - **scheduleMatch:** insere partida com `status: 'scheduled'`, `result: null`.
-- **finalizeMatch(matchId, result):** aplica as mesmas regras de fila que `recordMatch` e atualiza o registro.
+- **finalizeMatch(matchId, result):** na mesma transação, dissolve o perdedor (ou os dois, no empate) na fila e grava a próxima partida planejada com os times ainda presentes. Um erro desfaz o resultado e a próxima partida.
 
 ### bulkUpsertPlayerStats
 
@@ -241,22 +208,13 @@ App
 │   └── TeamCard + MatchHistory (+ modal MatchStatsModal)
 │
 ├── [Estatísticas globais]
-│   └── PlayerStats (totais em players.*)
+│   └── PlayerStats (gols e assistências somados de player_stats)
 │
 └── [Estatísticas da rodada]
     └── RoundStatistics (agregado via getRoundStatistics)
 ```
 
-### Estatísticas de Jogadores (recordGoal / recordAssist)
-
-```
-1. Abrir transação readwrite em [players]
-2. Buscar jogador por ID
-3. Incrementar player.goals (ou player.assists) em 1
-4. Atualizar registro com store.put(player)
-5. COMMIT
-6. Notificar outras abas via BroadcastChannel
-```
+Gols e assistências são gravados no card da partida (`bulkUpsertPlayerStats`). As duas abas de estatísticas leem `player_stats`.
 
 **Migrações:** v1 → stores base; v2 → `goals`/`assists` em players; v3 → `rounds`, `meta`, `player_stats`, índices `roundId`, rodada padrão “Importado” e backfill em times/partidas existentes.
 

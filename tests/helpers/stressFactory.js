@@ -3,6 +3,8 @@
  * Deterministic RNG for reproducible runs.
  */
 
+import { getMatches } from '../../src/api/indexeddb.js';
+
 /** @returns {() => number} uniform [0,1) */
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -47,8 +49,12 @@ export async function playFinalizedMatch(
   teamSize,
   result
 ) {
-  const inField = await ensureTwoInField(getTeams, formTeam, roundId, teamSize);
-  const match = await scheduleMatch(roundId, inField[0].id, inField[1].id, { teamSize });
+  const open = (await getMatches(roundId)).find((m) => m.status === 'scheduled');
+  let match = open;
+  if (!match) {
+    const inField = await ensureTwoInField(getTeams, formTeam, roundId, teamSize);
+    match = await scheduleMatch(roundId, inField[0].id, inField[1].id, { teamSize });
+  }
   await finalizeMatch(match.id, result, { teamSize });
   return match;
 }
