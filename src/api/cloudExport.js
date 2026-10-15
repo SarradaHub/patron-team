@@ -58,6 +58,20 @@ export function exportToSupabase(data) {
   return inFlight;
 }
 
+async function invokeErrorMessage(error) {
+  const response = error?.context;
+  if (response && typeof response.json === 'function') {
+    try {
+      const source = typeof response.clone === 'function' ? response.clone() : response;
+      const body = await source.json();
+      if (body && typeof body.error === 'string' && body.error) return body.error;
+    } catch {
+      // The body was not JSON.
+    }
+  }
+  return error?.message || 'Falha ao enviar dados para Supabase.';
+}
+
 async function sendSnapshot(data) {
   const exportId = exportIdForSnapshot(data);
   const body = {
@@ -78,7 +92,7 @@ async function sendSnapshot(data) {
 
   if (error) {
     console.error('exportToSupabase invoke error:', error);
-    throw new Error(error.message || 'Falha ao enviar dados para Supabase.');
+    throw new Error(await invokeErrorMessage(error));
   }
 
   if (result && typeof result === 'object' && result.ok === false) {
