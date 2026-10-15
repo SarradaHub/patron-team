@@ -1885,16 +1885,47 @@ export const SCHEDULED_MATCH_TIMER_MAX_MINUTES = 180;
 
 const DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES = 10;
 
-async function putMatchRow(match) {
+/**
+ * Lê a partida e grava só os campos do cronômetro na mesma transação,
+ * e só enquanto status continua `scheduled`.
+ */
+async function patchScheduledMatchTimer(matchId, mutate) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('matches', 'readwrite');
-    tx.objectStore('matches').put(match);
-    tx.oncomplete = () => {
-      notifyChange('match_timer_updated');
-      resolve();
+    const store = tx.objectStore('matches');
+    let abortReason = null;
+    const fail = (err) => {
+      abortReason = err;
+      try {
+        tx.abort();
+      } catch {
+        reject(err);
+      }
     };
-    tx.onerror = () => reject(tx.error);
+    const req = store.get(matchId);
+    req.onsuccess = () => {
+      const match = req.result;
+      if (!match || match.status !== 'scheduled') {
+        fail(new Error('Partida agendada não encontrada.'));
+        return;
+      }
+      let next;
+      try {
+        next = mutate(match);
+      } catch (err) {
+        fail(err);
+        return;
+      }
+      store.put(next);
+      tx.oncomplete = () => {
+        notifyChange('match_timer_updated');
+        resolve();
+      };
+    };
+    req.onerror = () => reject(req.error);
+    tx.onerror = () => reject(abortReason || tx.error);
+    tx.onabort = () => reject(abortReason || tx.error || new Error('Transação abortada.'));
   });
 }
 
@@ -1912,44 +1943,36 @@ export async function setScheduledMatchTimerDuration(matchId, minutes) {
       `Duração deve ser entre ${SCHEDULED_MATCH_TIMER_MIN_MINUTES} e ${SCHEDULED_MATCH_TIMER_MAX_MINUTES} minutos.`
     );
   }
-  const match = await getMatchById(matchId);
-  if (!match || match.status !== 'scheduled') {
-    throw new Error('Partida agendada não encontrada.');
-  }
-  if (match.countdownEndsAt) {
-    throw new Error('Pare o cronômetro (Zerar) para alterar a duração.');
-  }
-  await putMatchRow({ ...match, timerDurationMinutes: m });
+  await patchScheduledMatchTimer(matchId, (match) => {
+    if (match.countdownEndsAt) {
+      throw new Error('Pare o cronômetro (Zerar) para alterar a duração.');
+    }
+    return { ...match, timerDurationMinutes: m };
+  });
 }
 
 /**
  * Inicia contagem regressiva a partir de timerDurationMinutes (padrão 10 se ausente).
  */
 export async function startScheduledMatchCountdown(matchId) {
-  const match = await getMatchById(matchId);
-  if (!match || match.status !== 'scheduled') {
-    throw new Error('Partida agendada não encontrada.');
-  }
-  const minsRaw = match.timerDurationMinutes ?? DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES;
-  const mins = Math.round(Number(minsRaw));
-  if (
-    !Number.isFinite(mins) ||
-    mins < SCHEDULED_MATCH_TIMER_MIN_MINUTES ||
-    mins > SCHEDULED_MATCH_TIMER_MAX_MINUTES
-  ) {
-    throw new Error('Defina uma duração válida antes de iniciar.');
-  }
-  const countdownEndsAt = new Date(Date.now() + mins * 60 * 1000).toISOString();
-  await putMatchRow({ ...match, timerDurationMinutes: mins, countdownEndsAt });
+  await patchScheduledMatchTimer(matchId, (match) => {
+    const minsRaw = match.timerDurationMinutes ?? DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES;
+    const mins = Math.round(Number(minsRaw));
+    if (
+      !Number.isFinite(mins) ||
+      mins < SCHEDULED_MATCH_TIMER_MIN_MINUTES ||
+      mins > SCHEDULED_MATCH_TIMER_MAX_MINUTES
+    ) {
+      throw new Error('Defina uma duração válida antes de iniciar.');
+    }
+    const countdownEndsAt = new Date(Date.now() + mins * 60 * 1000).toISOString();
+    return { ...match, timerDurationMinutes: mins, countdownEndsAt };
+  });
 }
 
 /** Para o cronômetro sem alterar a duração configurada. */
 export async function clearScheduledMatchCountdown(matchId) {
-  const match = await getMatchById(matchId);
-  if (!match || match.status !== 'scheduled') {
-    throw new Error('Partida agendada não encontrada.');
-  }
-  await putMatchRow({ ...match, countdownEndsAt: null });
+  await patchScheduledMatchTimer(matchId, (match) => ({ ...match, countdownEndsAt: null }));
 }
 
 /** Soma gols + gols contra do adversário em player_stats (placar na lista de partidas). */
