@@ -60,6 +60,7 @@
   --cor-btn-secondary: #616161;
   --cor-perigo-escuro: #b71c1c;
   --cor-danger-outline: #b91c1c;
+  --cor-focus-ring: #1a7f37;
 }
 
 [data-theme='dark'] {
@@ -88,6 +89,8 @@
   --cor-fundo-input: #2a2a2a;
   --cor-scrollbar: #555555;
   --cor-scrollbar-hover: #777777;
+  --cor-focus-ring: #2ea44f;
+  --cor-tab-active: #1a7f37;
 }
 
 body {
@@ -143,6 +146,10 @@ textarea {
 .tab-btn.tab-active {
   background: var(--cor-primaria);
   color: white;
+}
+
+[data-theme='dark'] .tab-btn.tab-active {
+  background: var(--cor-tab-active);
 }
 
 /* ---------- Layout principal ---------- */
@@ -421,8 +428,8 @@ textarea {
 
 .input-text:focus,
 .input-number:focus {
-  border-color: var(--cor-primaria);
-  box-shadow: 0 0 0 2px rgba(26, 127, 55, 0.15);
+  border-color: var(--cor-focus-ring);
+  box-shadow: 0 0 0 2px var(--cor-focus-ring);
 }
 
 .input-text {
@@ -457,6 +464,12 @@ textarea {
 .add-player-form {
   display: flex;
   gap: 8px;
+}
+
+.field-error {
+  margin-top: 8px;
+  color: var(--cor-perigo);
+  font-size: var(--tipo-corpo);
 }
 
 .form-row {
@@ -1071,8 +1084,10 @@ textarea {
   color: white;
   font-size: 0.75rem;
   font-weight: 700;
-  width: 34px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1089,8 +1104,10 @@ textarea {
   color: white;
   font-size: 0.75rem;
   font-weight: 700;
-  width: 34px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1482,6 +1499,8 @@ textarea {
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.4);
   padding: 6px 12px;
+  min-width: 44px;
+  min-height: 44px;
   font-size: 1.15rem;
   line-height: 1;
   border-radius: 6px;
@@ -1803,6 +1822,7 @@ textarea {
   gap: 8px;
   margin-top: 10px;
   margin-bottom: 8px;
+  min-height: 44px;
 }
 
 .edit-match-selects {
