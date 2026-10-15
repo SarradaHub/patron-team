@@ -91,3 +91,15 @@ Then('I should see round statistics panel', async function () {
       .first()
   ).toBeVisible();
 });
+
+When('I click Enviar para nuvem', async function () {
+  await this.page.click(appSelectors.controls.exportButton);
+});
+
+Then('the Entrar form should be visible', async function () {
+  await expect(this.page.locator(appSelectors.login.username)).toBeVisible();
+  await expect(this.page.locator(appSelectors.login.password)).toBeVisible();
+  await expect(this.page.locator(appSelectors.login.submit)).toBeVisible();
+  await expect(this.page.getByRole('button', { name: /cadastrar|criar conta|registrar|sign up/i })).toHaveCount(0);
+  await expect(this.page.getByTestId('tab-queue')).toBeVisible();
+});

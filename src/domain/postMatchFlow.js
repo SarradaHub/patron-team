@@ -4,16 +4,12 @@
  */
 
 import { sortWaitingTeamsForRound } from './waitingQueueOrder.js';
+import { isValidTeamSize, rosterMeetsTeamSize } from './teamSize.js';
 
 function winnerLoserFromResult(match, result) {
   if (result === 'A_win') return { winnerId: match.teamA, loserId: match.teamB };
   if (result === 'B_win') return { winnerId: match.teamB, loserId: match.teamA };
   return { winnerId: null, loserId: null };
-}
-
-function rosterMeetsTeamSize(team, teamSize) {
-  if (!teamSize || teamSize < 1) return true;
-  return (team?.players?.length ?? 0) >= teamSize;
 }
 
 /**
@@ -27,9 +23,7 @@ export function availablePlayersFifo(players, playerIdsInRound) {
   const byJoined = (a, b) => new Date(a.joinedAt) - new Date(b.joinedAt);
   const inR = players.filter((p) => inRound.has(p.id) && p.status === 'available').sort(byJoined);
   const outR = players.filter((p) => !inRound.has(p.id) && p.status === 'available').sort(byJoined);
-  const merged = [...inR, ...outR];
-  if (merged.length > 0) return merged;
-  return players.filter((p) => p.status === 'available').sort(byJoined);
+  return [...inR, ...outR];
 }
 
 /**
@@ -46,6 +40,9 @@ export function availablePlayersFifo(players, playerIdsInRound) {
 export function planNextMatch(ctx) {
   const { match, result, teams, players, teamSize, preWaitingTeamIds, tiebreakerWinnerTeamId } =
     ctx;
+  if (!isValidTeamSize(teamSize)) {
+    return { type: 'none', reason: 'tamanho_invalido' };
+  }
   const preWaitingCount = preWaitingTeamIds?.length ?? 0;
   const roundId = teams[0]?.roundId || ctx.roundId;
   if (!roundId) return { type: 'none', reason: 'sem_round' };
@@ -59,13 +56,21 @@ export function planNextMatch(ctx) {
 
   if (result === 'draw') {
     if (preWaitingCount === 1) {
-      const avail = availablePlayersFifo(players, playerIdsInRound);
-      if (avail.length < teamSize) {
-        return { type: 'none', reason: 'fila_insuficiente_empate_1_waiting' };
-      }
-      const newPlayerIds = avail.slice(0, teamSize).map((p) => p.id);
       const w = teams.find((t) => t.id === preWaitingTeamIds[0]);
       if (!w || w.status !== 'waiting') return { type: 'none', reason: 'sem_waiting' };
+      if (!rosterMeetsTeamSize(w, teamSize)) {
+        return { type: 'none', reason: 'waiting_elenco_incompleto' };
+      }
+      const onWaitingRoster = new Set(
+        teams.filter((t) => t.status === 'waiting').flatMap((t) => t.players || []),
+      );
+      const freeQueue = availablePlayersFifo(players, playerIdsInRound).filter(
+        (p) => !onWaitingRoster.has(p.id),
+      );
+      if (freeQueue.length < teamSize) {
+        return { type: 'none', reason: 'fila_insuficiente_empate_1_waiting' };
+      }
+      const newPlayerIds = freeQueue.slice(0, teamSize).map((p) => p.id);
       if (!tiebreakerWinnerTeamId || ![match.teamA, match.teamB].includes(tiebreakerWinnerTeamId)) {
         return { type: 'none', reason: 'tiebreaker_obrigatorio' };
       }
@@ -99,7 +104,7 @@ export function planNextMatch(ctx) {
 
   if (waitingSorted.length === 1) {
     const sole = waitingSorted[0];
-    if (sole.players.length >= teamSize) {
+    if (rosterMeetsTeamSize(sole, teamSize)) {
       const winnerTeam = byId[winnerId];
       if (!winnerTeam) return { type: 'none', reason: 'time_vencedor_ausente' };
       if (!rosterMeetsTeamSize(winnerTeam, teamSize) || !rosterMeetsTeamSize(sole, teamSize)) {

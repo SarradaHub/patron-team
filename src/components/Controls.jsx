@@ -5,6 +5,7 @@ import {
   SCHEDULED_MATCH_TIMER_MIN_MINUTES,
 } from '../api/indexeddb.js';
 import { formatCountdownRemainingMs } from '../domain/countdownFormat.js';
+import { teamSizeFromInput } from '../domain/teamSize.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
 
 const CLEAR_CACHE_CONFIRM_MESSAGE =
@@ -19,6 +20,11 @@ export default function Controls({
   onScheduleNext,
   onExport,
   onImport,
+  loginOpen = false,
+  loginError = '',
+  cloudEmail = null,
+  onCloudSignIn,
+  onCloudSignOut,
   onClearLocalCache,
   onRunMaintenance,
   activeRoundId,
@@ -37,6 +43,8 @@ export default function Controls({
   const [playerName, setPlayerName] = useState('');
   const [nameError, setNameError] = useState('');
   const [addAsGoalkeeperOnly, setAddAsGoalkeeperOnly] = useState(false);
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
   const playerNameInputRef = useRef(null);
   const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
   const [pendingImport, setPendingImport] = useState(null);
@@ -173,7 +181,14 @@ export default function Controls({
             min="1"
             max="20"
             value={teamSize}
-            onChange={(e) => onTeamSizeChange(Number(e.target.value))}
+            onChange={(e) => {
+              const next = teamSizeFromInput(e.target.value);
+              if (next == null) {
+                e.target.value = String(teamSize);
+                return;
+              }
+              onTeamSizeChange(next);
+            }}
             className="input-number"
           />
           <button
@@ -312,6 +327,14 @@ export default function Controls({
 
       <section className="control-section">
         <h3>Nuvem / Restore</h3>
+        {cloudEmail ? (
+          <p className="cloud-account">
+            <span data-testid="cloud-account-email">{cloudEmail}</span>
+            <button type="button" className="btn btn-outline btn-sm" onClick={onCloudSignOut}>
+              Sair
+            </button>
+          </p>
+        ) : null}
         <div className="backup-buttons">
           <button
             type="button"
@@ -348,6 +371,46 @@ export default function Controls({
         <p className="info-message subtle">
           Remove dados do navegador (IndexedDB). Não apaga o backup enviado para a nuvem.
         </p>
+        {loginOpen && !cloudEmail ? (
+          <form
+            className="cloud-login"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onCloudSignIn?.(loginUser, loginPass);
+            }}
+          >
+            <label className="field-label" htmlFor="login-user">
+              E-mail
+            </label>
+            <input
+              id="login-user"
+              type="email"
+              autoComplete="username"
+              className="input-text"
+              value={loginUser}
+              onChange={(event) => setLoginUser(event.target.value)}
+            />
+            <label className="field-label" htmlFor="login-pass">
+              Senha
+            </label>
+            <input
+              id="login-pass"
+              type="password"
+              autoComplete="current-password"
+              className="input-text"
+              value={loginPass}
+              onChange={(event) => setLoginPass(event.target.value)}
+            />
+            {loginError ? (
+              <p className="login-error" role="alert">
+                {loginError}
+              </p>
+            ) : null}
+            <button type="submit" className="btn btn-primary">
+              Entrar
+            </button>
+          </form>
+        ) : null}
         {pendingImport && (
           <ConfirmDialog
             title="Importar dados"

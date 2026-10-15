@@ -2,9 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import toast, { Toaster } from 'react-hot-toast';
 import {
   addPlayer,
-  getPlayers,
-  getTeams,
-  getMatches,
   formAllTeamsPossible,
   removePlayer,
   replaceFieldPlayerWith,
@@ -24,15 +21,10 @@ import {
   exportData,
   importData,
   onChange,
-  ensureDefaultActiveRound,
-  getActiveRoundId,
   setActiveRoundId,
-  getRounds,
   updateRoundName,
   suggestNextMatchForRound,
-  getRoundStatistics,
-  getGlobalPlayerStatistics,
-  getMatchScoresForRound,
+  loadNightSnapshot,
   listPreWaitingTeamIds,
   runDatastoreMaintenance,
   toggleTeamBlocked,
@@ -42,6 +34,7 @@ import {
   clearScheduledMatchCountdown,
 } from './api/indexeddb.js';
 import { exportToSupabase } from './api/cloudExport.js';
+import { supabase } from './lib/supabaseClient.js';
 import { clearLocalAppCache } from './api/localDataClear.js';
 import { sortWaitingTeamsForRound } from './domain/waitingQueueOrder.js';
 import { buildTeamLabelById, labelMatchSide } from './domain/teamLabels.js';
@@ -73,6 +66,17 @@ function toastFinalized(saved) {
   );
 }
 
+const EMPTY_NIGHT = {
+  players: [],
+  teams: [],
+  matches: [],
+  rounds: [],
+  activeRoundId: null,
+  roundStatsRows: [],
+  globalStatsRows: [],
+  matchScores: {},
+};
+
 const TOAST_OPTIONS = {
   className: 'app-toast',
   duration: 4000,
@@ -84,14 +88,17 @@ const TOAST_OPTIONS = {
 };
 
 export default function App() {
-  const [players, setPlayers] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [matches, setMatches] = useState([]);
-  const [rounds, setRounds] = useState([]);
-  const [activeRoundId, setActiveRoundIdState] = useState(null);
-  const [roundStatsRows, setRoundStatsRows] = useState([]);
-  const [globalStatsRows, setGlobalStatsRows] = useState([]);
-  const [matchScores, setMatchScores] = useState({});
+  const [night, setNight] = useState(EMPTY_NIGHT);
+  const {
+    players,
+    teams,
+    matches,
+    rounds,
+    activeRoundId,
+    roundStatsRows,
+    globalStatsRows,
+    matchScores,
+  } = night;
   const [statsModalMatch, setStatsModalMatch] = useState(null);
   const [activeTab, setActiveTab] = useState('queue');
   const [teamSize, setTeamSize] = useState(5);
@@ -104,7 +111,12 @@ export default function App() {
   const [editMatch, setEditMatch] = useState(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [timerTargetMatchId, setTimerTargetMatchId] = useState(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [cloudEmail, setCloudEmail] = useState(null);
+  const [pendingSnapshot, setPendingSnapshot] = useState(null);
   const timerExpiredRef = useRef(new Set());
+  const cloudEmailRef = useRef(null);
 
   useEffect(() => {
     const id = setInterval(() => setClockNow(Date.now()), 1000);
@@ -148,25 +160,17 @@ export default function App() {
 
   const refreshData = useCallback(async () => {
     try {
-      await ensureDefaultActiveRound();
-      const aid = await getActiveRoundId();
-      setActiveRoundIdState(aid);
-      const [p, t, m, r, stats, globalStats, scores] = await Promise.all([
-        getPlayers(),
-        aid ? getTeams(aid) : getTeams(),
-        aid ? getMatches(aid) : getMatches(),
-        getRounds(),
-        aid ? getRoundStatistics(aid) : Promise.resolve([]),
-        getGlobalPlayerStatistics(),
-        aid ? getMatchScoresForRound(aid) : Promise.resolve({}),
-      ]);
-      setPlayers(p);
-      setTeams(t);
-      setMatches(m);
-      setRounds(r);
-      setRoundStatsRows(stats);
-      setGlobalStatsRows(globalStats);
-      setMatchScores(scores);
+      const snap = await loadNightSnapshot();
+      setNight({
+        players: snap.players,
+        teams: snap.teams,
+        matches: snap.matches,
+        rounds: snap.rounds,
+        activeRoundId: snap.activeRoundId,
+        roundStatsRows: snap.roundStats,
+        globalStatsRows: snap.globalStats,
+        matchScores: snap.matchScores,
+      });
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
       toast.error('Erro ao carregar dados do banco.');
@@ -180,6 +184,30 @@ export default function App() {
     });
     return unsubscribe;
   }, [refreshData]);
+
+  useEffect(() => {
+    if (!supabase) return undefined;
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      const email = data.session?.user?.email ?? null;
+      cloudEmailRef.current = email;
+      setCloudEmail(email);
+    }).catch(() => {
+      if (!active) return;
+      cloudEmailRef.current = null;
+      setCloudEmail(null);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const email = session?.user?.email ?? null;
+      cloudEmailRef.current = email;
+      setCloudEmail(email);
+    });
+    return () => {
+      active = false;
+      data?.subscription?.unsubscribe();
+    };
+  }, []);
 
   const handleTimerMatchPick = useCallback((matchId) => {
     setTimerTargetMatchId(matchId || null);
@@ -664,15 +692,75 @@ export default function App() {
     }
   };
 
-  const handleExport = async () => {
+  const sendCloudExport = async (data) => {
     try {
-      const data = await exportData();
       const result = await exportToSupabase(data);
       if (result?.duplicate) {
         toast.success('Exportação já registrada (idempotente).');
       } else {
         toast.success('Dados enviados para a nuvem!');
       }
+    } catch (err) {
+      console.error('handleExport:', err);
+      toast.error(`Erro ao exportar: ${err.message}`);
+    }
+  };
+
+  const handleCloudSignIn = async (email, password) => {
+    try {
+      if (!supabase) {
+        setLoginError(
+          'Supabase não configurado. Defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+        );
+        return;
+      }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error || !data?.session) {
+        setLoginError(error?.message || 'Não foi possível entrar.');
+        return;
+      }
+      const signedInEmail = data.session.user?.email || email.trim();
+      cloudEmailRef.current = signedInEmail;
+      setCloudEmail(signedInEmail);
+      setLoginOpen(false);
+      setLoginError('');
+      if (!pendingSnapshot) return;
+      const snapshot = pendingSnapshot;
+      setPendingSnapshot(null);
+      await sendCloudExport(snapshot);
+    } catch (err) {
+      setLoginError(err?.message || 'Não foi possível entrar.');
+    }
+  };
+
+  const handleCloudSignOut = async () => {
+    if (supabase) {
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) {
+        toast.error(`Erro ao sair: ${error.message}`);
+        return;
+      }
+    }
+    cloudEmailRef.current = null;
+    setCloudEmail(null);
+    setLoginOpen(false);
+    setLoginError('');
+  };
+
+  const handleExport = async () => {
+    try {
+      const data = await exportData();
+      if (!cloudEmailRef.current) {
+        setPendingSnapshot(data);
+        setLoginError('');
+        setLoginOpen(true);
+        return;
+      }
+      setLoginOpen(false);
+      await sendCloudExport(data);
     } catch (err) {
       console.error('handleExport:', err);
       toast.error(`Erro ao exportar: ${err.message}`);
@@ -787,6 +875,11 @@ export default function App() {
             onScheduleNext={handleScheduleNext}
             onExport={handleExport}
             onImport={handleImport}
+            loginOpen={loginOpen}
+            loginError={loginError}
+            cloudEmail={cloudEmail}
+            onCloudSignIn={handleCloudSignIn}
+            onCloudSignOut={handleCloudSignOut}
             onClearLocalCache={handleClearLocalCache}
             onRunMaintenance={handleRunMaintenance}
             activeRoundId={activeRoundId}
