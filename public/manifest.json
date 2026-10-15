@@ -1,6 +1,6 @@
 {
-  "name": "Arjen - Fila de Times",
-  "short_name": "TeamQueue",
+  "name": "Fila de Times",
+  "short_name": "Fila de Times",
   "description": "Gerenciador de fila de jogadores e times offline-first com IndexedDB",
   "start_url": "./",
   "display": "standalone",

@@ -27,10 +27,10 @@ export default function PlayerStats({
 
   // Mapeia status para rótulos em português
   const statusLabel = {
-    available: '🟢 Disponível',
-    in_field: '🔵 Em campo',
-    injured: '🔴 Lesionado',
-    tired: '🟡 Cansado',
+    available: 'Disponível',
+    in_field: 'Em campo',
+    injured: 'Lesionado',
+    tired: 'Cansado',
   };
 
   /**
@@ -97,11 +97,24 @@ export default function PlayerStats({
     }
   };
 
-  // Ícone de ordenação para as colunas
-  const sortIcon = (column) => {
-    if (sortBy !== column) return '↕️';
-    return sortDir === 'asc' ? '⬆️' : '⬇️';
+  const sortState = (column) => {
+    if (sortBy !== column) return 'none';
+    return sortDir === 'asc' ? 'asc' : 'desc';
   };
+
+  const sortWord = (column) => {
+    const state = sortState(column);
+    if (state === 'asc') return 'menor';
+    if (state === 'desc') return 'maior';
+    return '';
+  };
+
+  const sortCue = (column) => (
+    <>
+      <span className={`sort-mark sort-mark--${sortState(column)}`} aria-hidden="true" />
+      {sortWord(column) ? <span className="visually-hidden"> {sortWord(column)}</span> : null}
+    </>
+  );
 
   // Calcula totais gerais para o rodapé da tabela
   const totalGoals = players.reduce((sum, p) => sum + (p.goals || 0), 0);
@@ -110,38 +123,32 @@ export default function PlayerStats({
   return (
     <div className="stats-container">
       <div className="panel stats-panel">
-        <h2>📊 Estatísticas de Jogadores</h2>
+        <h2>Estatísticas de jogadores</h2>
 
-        {/* Barra de busca */}
         <div className="stats-filter">
           <input
             type="text"
             className="input-text"
-            placeholder="🔍 Filtrar por nome..."
+            placeholder="Filtrar por nome..."
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
           />
         </div>
 
-        {/* Resumo geral */}
-        <div className="stats-summary">
-          <div className="stats-summary-item">
-            <span className="stats-summary-value">{players.length}</span>
-            <span className="stats-summary-label">Jogadores</span>
-          </div>
-          <div className="stats-summary-item">
-            <span className="stats-summary-value">{totalGoals}</span>
-            <span className="stats-summary-label">⚽ Gols</span>
-          </div>
-          <div className="stats-summary-item">
-            <span className="stats-summary-value">{totalAssists}</span>
-            <span className="stats-summary-label">👟 Assistências</span>
-          </div>
-          <div className="stats-summary-item">
-            <span className="stats-summary-value">{totalGoals + totalAssists}</span>
-            <span className="stats-summary-label">🏅 Total</span>
-          </div>
-        </div>
+        <p className="stats-totals">
+          <span>
+            <strong>{players.length}</strong> jogadores
+          </span>
+          <span>
+            <strong>{totalGoals}</strong> gols
+          </span>
+          <span>
+            <strong>{totalAssists}</strong> assistências
+          </span>
+          <span>
+            <strong>{totalGoals + totalAssists}</strong> total
+          </span>
+        </p>
 
         {sortedPlayers.length === 0 ? (
           <p className="empty-message">
@@ -158,8 +165,9 @@ export default function PlayerStats({
                   <th
                     className="stats-th-name sortable"
                     onClick={() => handleSort('name')}
+                    aria-sort={sortBy === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   >
-                    Jogador {sortIcon('name')}
+                    Jogador {sortCue('name')}
                   </th>
                   <th className="stats-th-status">Status</th>
                   {showWinDrawLoss && (
@@ -167,40 +175,46 @@ export default function PlayerStats({
                       <th
                         className="stats-th-stat sortable"
                         onClick={() => handleSort('wins')}
+                        aria-sort={sortBy === 'wins' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        ✅ V {sortIcon('wins')}
+                        V {sortCue('wins')}
                       </th>
                       <th
                         className="stats-th-stat sortable"
                         onClick={() => handleSort('draws')}
+                        aria-sort={sortBy === 'draws' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        🤝 E {sortIcon('draws')}
+                        E {sortCue('draws')}
                       </th>
                       <th
                         className="stats-th-stat sortable"
                         onClick={() => handleSort('losses')}
+                        aria-sort={sortBy === 'losses' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
-                        ❌ D {sortIcon('losses')}
+                        D {sortCue('losses')}
                       </th>
                     </>
                   )}
                   <th
                     className="stats-th-stat sortable"
                     onClick={() => handleSort('goals')}
+                    aria-sort={sortBy === 'goals' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   >
-                    ⚽ Gols {sortIcon('goals')}
+                    Gols {sortCue('goals')}
                   </th>
                   <th
                     className="stats-th-stat sortable"
                     onClick={() => handleSort('assists')}
+                    aria-sort={sortBy === 'assists' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   >
-                    👟 Assist. {sortIcon('assists')}
+                    Assist. {sortCue('assists')}
                   </th>
                   <th
                     className="stats-th-stat sortable"
                     onClick={() => handleSort('total')}
+                    aria-sort={sortBy === 'total' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   >
-                    🏅 Total {sortIcon('total')}
+                    Total {sortCue('total')}
                   </th>
                   <th className="stats-th-actions">Ações</th>
                 </tr>
@@ -234,7 +248,7 @@ export default function PlayerStats({
                         >
                           -
                         </button>
-                        <span className="stats-action-label">⚽</span>
+                        <span className="stats-action-label">Gol</span>
                         <button
                           className="btn btn-sm btn-stat-plus"
                           onClick={() => onRecordGoal(player.id)}
@@ -254,7 +268,7 @@ export default function PlayerStats({
                         >
                           -
                         </button>
-                        <span className="stats-action-label">👟</span>
+                        <span className="stats-action-label">Assist.</span>
                         <button
                           className="btn btn-sm btn-stat-plus"
                           onClick={() => onRecordAssist(player.id)}

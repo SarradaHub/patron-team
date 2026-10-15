@@ -27,10 +27,10 @@ export default function GoalkeeperQueuePanel({ players = [], onDeletePlayer }) {
   );
 
   return (
-    <div className="panel queue-panel">
+    <div className="panel queue-panel goalkeeper-panel">
       <h2>Lista de goleiros ({goalkeeperPlayers.length})</h2>
       {goalkeeperPlayers.length === 0 ? (
-        <p className="empty-message">Nenhum jogador marcado como goleiro.</p>
+        <p className="empty-message">Nenhum goleiro. Marque Só goleiro ao adicionar um jogador.</p>
       ) : (
         <ul className="player-list">
           {goalkeeperPlayers.map((player, index) => (

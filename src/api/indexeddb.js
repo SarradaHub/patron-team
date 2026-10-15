@@ -245,6 +245,27 @@ export async function getRound(roundId) {
   return promisify(tx.objectStore('rounds').get(roundId));
 }
 
+/** Grava `rounds.name`. Vazio volta ao rótulo com data. Não muda o schema. */
+export async function updateRoundName(roundId, name) {
+  if (!roundId) throw new Error('Rodada não encontrada.');
+  const trimmed = name != null ? String(name).trim() : '';
+  const label = trimmed || defaultRoundLabel();
+  const db = await openDB();
+  const tx = db.transaction('rounds', 'readwrite');
+  const store = tx.objectStore('rounds');
+  const round = await promisify(store.get(roundId));
+  if (!round) throw new Error('Rodada não encontrada.');
+  round.name = label;
+  round.updatedAt = new Date().toISOString();
+  store.put(round);
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  notifyChange('round_renamed');
+  return round;
+}
+
 // ---------- Jogadores ----------
 
 export async function addPlayer(name, { goalkeeperOnly = false } = {}) {

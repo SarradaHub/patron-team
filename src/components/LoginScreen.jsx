@@ -67,8 +67,7 @@ export default function LoginScreen({ onLogin }) {
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-header">
           <span className="login-icon">⚽</span>
-          <h1>Arjen</h1>
-          <p>Fila de Times</p>
+          <h1>Fila de Times</h1>
         </div>
 
         <div className="login-field">

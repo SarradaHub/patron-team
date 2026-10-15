@@ -59,7 +59,7 @@ function PlayerRow({
             title="Lesão — marcar como lesionado"
             aria-label="Lesão — marcar como lesionado"
           >
-            {'\u{1F915}'}
+            Lesão
           </button>
           <button
             type="button"
@@ -68,7 +68,7 @@ function PlayerRow({
             title="Cansado — marcar como cansado"
             aria-label="Cansado — marcar como cansado"
           >
-            {'\u{1F613}'}
+            Cansado
           </button>
           <button
             type="button"
@@ -77,7 +77,7 @@ function PlayerRow({
             title="Substituir — próximo da fila"
             aria-label="Substituir — próximo da fila"
           >
-            {'\u{1F504}'}
+            Sub
           </button>
         </div>
       )}
@@ -90,7 +90,7 @@ function PlayerRow({
             title="Lesão — marcar como lesionado (fora de campo)"
             aria-label="Lesão — marcar como lesionado (fora de campo)"
           >
-            {'\u{1F915}'}
+            Lesão
           </button>
           <button
             type="button"
@@ -99,7 +99,7 @@ function PlayerRow({
             title="Cansado — marcar como cansado (fora de campo)"
             aria-label="Cansado — marcar como cansado (fora de campo)"
           >
-            {'\u{1F613}'}
+            Cansado
           </button>
         </div>
       )}
@@ -169,7 +169,7 @@ export default function QueueList({
     <div className="panel queue-panel" data-testid="queue-panel">
       <h2>Fila de Jogadores ({players.length})</h2>
       {players.length === 0 ? (
-        <p className="empty-message">Nenhum jogador na fila. Adicione jogadores para começar!</p>
+        <p className="empty-message">Nenhum jogador na fila. Adicione jogadores em Controles.</p>
       ) : (
         <ul className="player-list">
           {players.map((player, index) => (

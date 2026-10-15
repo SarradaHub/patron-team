@@ -8,6 +8,14 @@ import {
   getFieldRosterIds,
 } from '../domain/goalkeeperEligibility.js';
 import { labelMatchSide } from '../domain/teamLabels.js';
+import { validateMatchPlayerStats } from '../domain/playerStatRules.js';
+import ConfirmDialog from './ConfirmDialog.jsx';
+
+const RESULT_CONFIRM = {
+  A_win: { label: 'Time A venceu', ending: 'Time A venceu' },
+  B_win: { label: 'Time B venceu', ending: 'Time B venceu' },
+  draw: { label: 'Empate', ending: 'empate' },
+};
 
 function StatStepper({ label, value, onDecrement, onIncrement }) {
   return (
@@ -39,7 +47,7 @@ function StatStepper({ label, value, onDecrement, onIncrement }) {
 function TeamStatsBlock({ title, team, rows, nameById, onAdjustRow }) {
   if (!team) return null;
   return (
-    <div className="match-stats-team-block panel stats-panel">
+    <div className="match-stats-team-block">
       <h4 className="match-stats-team-title">{title}</h4>
       <div className="stats-table-wrapper">
         <table className="stats-table match-stats-mini-table">
@@ -47,8 +55,8 @@ function TeamStatsBlock({ title, team, rows, nameById, onAdjustRow }) {
             <tr>
               <th>Jogador</th>
               <th>Gols</th>
-              <th>Ass.</th>
-              <th>G.C.</th>
+              <th>Assist.</th>
+              <th>Contra</th>
             </tr>
           </thead>
           <tbody>
@@ -88,17 +96,23 @@ function TeamStatsBlock({ title, team, rows, nameById, onAdjustRow }) {
   );
 }
 
+function gkOptionText(id, nameById, playerById) {
+  const name = nameById[id] || String(id).slice(0, 8);
+  return playerById[id]?.goalkeeperOnly ? `${name} · Só goleiro` : name;
+}
+
 function GoalkeeperBlock({
   label,
   value,
   optionIds,
   nameById,
+  playerById,
   stats,
   onChangePlayer,
   onAdjustStat,
 }) {
   return (
-    <div className="match-gk-select panel stats-panel">
+    <div className="match-gk-select">
       <label className="match-gk-label">{label}</label>
       <select
         className="match-gk-input"
@@ -108,7 +122,7 @@ function GoalkeeperBlock({
         <option value="">Nenhum</option>
         {optionIds.map((id) => (
           <option key={id} value={id}>
-            {nameById[id] || id.slice(0, 8)}
+            {gkOptionText(id, nameById, playerById)}
           </option>
         ))}
       </select>
@@ -124,7 +138,7 @@ function GoalkeeperBlock({
             />
           </div>
           <div className="match-gk-stat">
-            <span className="match-gk-stat-label">Ass.</span>
+            <span className="match-gk-stat-label">Assist.</span>
             <StatStepper
               label="assistências do goleiro"
               value={stats.assists}
@@ -133,7 +147,7 @@ function GoalkeeperBlock({
             />
           </div>
           <div className="match-gk-stat">
-            <span className="match-gk-stat-label">G.C.</span>
+            <span className="match-gk-stat-label">Contra</span>
             <StatStepper
               label="gols contra do goleiro"
               value={stats.ownGoals}
@@ -164,6 +178,10 @@ export default function MatchStatsModal({
     () => Object.fromEntries((allPlayers || []).map((p) => [p.id, p.name])),
     [allPlayers]
   );
+  const playerById = useMemo(
+    () => Object.fromEntries((allPlayers || []).map((p) => [p.id, p])),
+    [allPlayers]
+  );
   const teamMap = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t])), [teams]);
   const teamA = teamMap[match.teamA];
   const teamB = teamMap[match.teamB];
@@ -174,6 +192,8 @@ export default function MatchStatsModal({
   const [gkTeamB, setGkTeamB] = useState('');
   const [gkStatsA, setGkStatsA] = useState({ goals: 0, assists: 0, ownGoals: 0 });
   const [gkStatsB, setGkStatsB] = useState({ goals: 0, assists: 0, ownGoals: 0 });
+  const [saveErrors, setSaveErrors] = useState([]);
+  const [pendingResult, setPendingResult] = useState(null);
 
   const idsField = useMemo(() => getFieldRosterIds(match, teamA, teamB), [match, teamA, teamB]);
 
@@ -206,14 +226,24 @@ export default function MatchStatsModal({
   const optionsGkA = useMemo(() => {
     const s = new Set(eligA);
     if (gkTeamA) s.add(gkTeamA);
-    return [...s].sort((a, b) => (nameById[a] || '').localeCompare(nameById[b] || '', 'pt-BR'));
-  }, [eligA, gkTeamA, nameById]);
+    return [...s].sort((a, b) => {
+      const ga = playerById[a]?.goalkeeperOnly ? 0 : 1;
+      const gb = playerById[b]?.goalkeeperOnly ? 0 : 1;
+      if (ga !== gb) return ga - gb;
+      return (nameById[a] || '').localeCompare(nameById[b] || '', 'pt-BR');
+    });
+  }, [eligA, gkTeamA, nameById, playerById]);
 
   const optionsGkB = useMemo(() => {
     const s = new Set(eligB);
     if (gkTeamB) s.add(gkTeamB);
-    return [...s].sort((a, b) => (nameById[a] || '').localeCompare(nameById[b] || '', 'pt-BR'));
-  }, [eligB, gkTeamB, nameById]);
+    return [...s].sort((a, b) => {
+      const ga = playerById[a]?.goalkeeperOnly ? 0 : 1;
+      const gb = playerById[b]?.goalkeeperOnly ? 0 : 1;
+      if (ga !== gb) return ga - gb;
+      return (nameById[a] || '').localeCompare(nameById[b] || '', 'pt-BR');
+    });
+  }, [eligB, gkTeamB, nameById, playerById]);
 
   useEffect(() => {
     let cancelled = false;
@@ -338,25 +368,46 @@ export default function MatchStatsModal({
 
   const saveStatsToDb = async () => {
     const combined = buildCombinedPayload();
+    const ruleErrors = [...new Set(validateMatchPlayerStats(combined))];
+    if (ruleErrors.length) {
+      setSaveErrors(ruleErrors);
+      return false;
+    }
+    setSaveErrors([]);
     await bulkUpsertPlayerStats(match.id, roundId, combined);
+    return true;
   };
 
   const handleSave = async () => {
     try {
-      await saveStatsToDb();
+      const saved = await saveStatsToDb();
+      if (!saved) return;
       onSaved?.();
       onClose();
     } catch (err) {
-      alert(err.message || String(err));
+      setSaveErrors([err.message || String(err)]);
     }
+  };
+
+  const askResult = (result) => {
+    if (match.status !== 'scheduled' || !onFinalizeFromStats || !onRequestDrawFromStats) return;
+    const ruleErrors = [...new Set(validateMatchPlayerStats(buildCombinedPayload()))];
+    if (ruleErrors.length) {
+      setSaveErrors(ruleErrors);
+      setPendingResult(null);
+      return;
+    }
+    setSaveErrors([]);
+    setPendingResult(result);
   };
 
   const handleSaveAndSetResult = async (result) => {
     if (match.status !== 'scheduled' || !onFinalizeFromStats || !onRequestDrawFromStats) return;
     try {
-      await saveStatsToDb();
+      const saved = await saveStatsToDb();
+      if (!saved) return;
     } catch (err) {
-      alert(err.message || String(err));
+      setSaveErrors([err.message || String(err)]);
       return;
     }
     try {
@@ -368,7 +419,7 @@ export default function MatchStatsModal({
       }
       onClose();
     } catch (err) {
-      alert(err.message || String(err));
+      setSaveErrors([err.message || String(err)]);
     }
   };
 
@@ -392,24 +443,22 @@ export default function MatchStatsModal({
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-content match-stats-modal match-stats-modal-wide">
         <h3>Stats da partida</h3>
-        <p className="modal-sub">
-          Padrão do placar: <strong>Time A</strong> à esquerda, <strong>Time B</strong> à direita. Salve a
-          qualquer momento.
+        <p className="match-stats-score-line">
+          <span className="match-stats-score-side match-stats-score-side--a">
+            <strong>{goalsA}</strong> Time A
+          </span>
+          <span className="match-stats-score-side match-stats-score-side--b">
+            <strong>{goalsB}</strong> Time B
+          </span>
         </p>
-        <div className="stats-summary match-stats-score-summary">
-          <div className="stats-summary-item match-stats-score-summary--a">
-            <span className="stats-summary-value">{goalsA}</span>
-            <span className="stats-summary-label">
-              <span className="stats-summary-main">Gols Time A (esq.)</span>
-            </span>
-          </div>
-          <div className="stats-summary-item match-stats-score-summary--b">
-            <span className="stats-summary-value">{goalsB}</span>
-            <span className="stats-summary-label">
-              <span className="stats-summary-main">Gols Time B (dir.)</span>
-            </span>
-          </div>
-        </div>
+        {saveErrors.length > 0 ? (
+          <ul className="match-stats-errors">
+            {saveErrors.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="match-stats-scroll">
         {!rowsA.length && !rowsB.length ? (
           <p className="modal-sub warning-text">
             Elenco desta partida não está disponível (times dissolvidos e sem stats salvas). Partidas
@@ -426,10 +475,11 @@ export default function MatchStatsModal({
               onAdjustRow={(pid, f, delta) => updateRow(setRowsA, pid, f, delta)}
             />
             <GoalkeeperBlock
-              label="Goleiro (fora do elenco)"
+              label="Goleiro"
               value={gkTeamA}
               optionIds={optionsGkA}
               nameById={nameById}
+              playerById={playerById}
               stats={gkStatsA}
               onChangePlayer={async (id) => {
                 setGkTeamA(id);
@@ -465,10 +515,11 @@ export default function MatchStatsModal({
               onAdjustRow={(pid, f, delta) => updateRow(setRowsB, pid, f, delta)}
             />
             <GoalkeeperBlock
-              label="Goleiro (fora do elenco)"
+              label="Goleiro"
               value={gkTeamB}
               optionIds={optionsGkB}
               nameById={nameById}
+              playerById={playerById}
               stats={gkStatsB}
               onChangePlayer={async (id) => {
                 setGkTeamB(id);
@@ -496,6 +547,8 @@ export default function MatchStatsModal({
             />
           </div>
         </div>
+        </div>
+        <div className="match-stats-dock">
         {showResultActions ? (
           <div className="match-stats-result-panel">
             <h4 className="match-stats-result-title">Resultado (finaliza a partida)</h4>
@@ -507,7 +560,7 @@ export default function MatchStatsModal({
                 type="button"
                 className="btn btn-match btn-a-win btn-sm"
                 disabled={!canSave}
-                onClick={() => handleSaveAndSetResult('A_win')}
+                onClick={() => askResult('A_win')}
               >
                 Time A venceu
               </button>
@@ -515,7 +568,7 @@ export default function MatchStatsModal({
                 type="button"
                 className="btn btn-match btn-draw btn-sm"
                 disabled={!canSave}
-                onClick={() => handleSaveAndSetResult('draw')}
+                onClick={() => askResult('draw')}
               >
                 Empate
               </button>
@@ -523,7 +576,7 @@ export default function MatchStatsModal({
                 type="button"
                 className="btn btn-match btn-b-win btn-sm"
                 disabled={!canSave}
-                onClick={() => handleSaveAndSetResult('B_win')}
+                onClick={() => askResult('B_win')}
               >
                 Time B venceu
               </button>
@@ -543,7 +596,21 @@ export default function MatchStatsModal({
             Salvar stats
           </button>
         </div>
+        </div>
       </div>
+      {pendingResult && (
+        <ConfirmDialog
+          title="Confirmar resultado"
+          message={`Salvar as stats e finalizar como ${RESULT_CONFIRM[pendingResult].ending}?`}
+          confirmLabel={RESULT_CONFIRM[pendingResult].label}
+          onCancel={() => setPendingResult(null)}
+          onConfirm={() => {
+            const result = pendingResult;
+            setPendingResult(null);
+            handleSaveAndSetResult(result);
+          }}
+        />
+      )}
     </div>
   );
 }
