@@ -23,6 +23,8 @@ import {
   formAllTeamsPossible,
   formTeamsForRound,
   removePlayer,
+  replaceFieldPlayerWith,
+  swapRosterPlayer,
   restorePlayerToAvailable,
   recordMatch,
   getTeams,
@@ -346,7 +348,7 @@ describe('formTeamsForRound', () => {
 });
 
 describe('removePlayer', () => {
-  it('deve marcar jogador como lesionado e substituir pelo próximo time na fila', async () => {
+  it('sem substituto: lesão tira o jogador de campo e não puxa outro', async () => {
     const rid = await testRoundId();
     await addPlayer('João');
     await addPlayer('X1');
@@ -364,19 +366,20 @@ describe('removePlayer', () => {
     expect(victim.status).toBe('in_field');
 
     const { substituted } = await removePlayer(victim.id, 'injured', false, rid, 1);
-    expect(substituted).toBe(true);
+    expect(substituted).toBe(false);
 
     const updated = await getPlayers();
     expect(updated.find((p) => p.id === victim.id).status).toBe('injured');
     const x2 = updated.find((p) => p.name === 'X2');
-    expect(x2.status).toBe('in_field');
+    expect(x2.status).not.toBe('in_field');
     const teamsAfter = await getTeams(rid);
+    expect(teamsAfter.some((t) => (t.players || []).includes(victim.id))).toBe(false);
     const stillWaiting = teamsAfter.find((t) => t.id === waitingTeam.id);
     expect(stillWaiting).toBeDefined();
-    expect(stillWaiting.players).toContain(updated.find((p) => p.name === 'Rep').id);
+    expect(stillWaiting.players).toContain(updated.find((p) => p.name === 'X2').id);
   });
 
-  it('deve marcar jogador como cansado e substituir pelo próximo time na fila', async () => {
+  it('sem substituto: cansado tira o jogador de campo e não puxa outro', async () => {
     const rid = await testRoundId();
     await addPlayer('Maria');
     await addPlayer('X');
@@ -389,18 +392,17 @@ describe('removePlayer', () => {
 
     const maria = (await getPlayers()).find((p) => p.name === 'Maria');
     const { substituted } = await removePlayer(maria.id, 'tired', false, rid, 1);
-    expect(substituted).toBe(true);
+    expect(substituted).toBe(false);
 
     const players = await getPlayers();
-    const tired = players.find((p) => p.id === maria.id);
-    expect(tired.status).toBe('tired');
+    expect(players.find((p) => p.id === maria.id).status).toBe('tired');
     const y = players.find((p) => p.name === 'Y');
-    expect(y.status).toBe('in_field');
-    const waitingRoster = (await getTeams(rid)).find((t) => t.status === 'waiting')?.players || [];
-    expect(waitingRoster).toContain(players.find((p) => p.name === 'Z').id);
+    expect(y.status).not.toBe('in_field');
+    const teamsAfter = await getTeams(rid);
+    expect(teamsAfter.some((t) => (t.players || []).includes(maria.id))).toBe(false);
   });
 
-  it('sem time waiting: substitui por jogador disponível na fila global', async () => {
+  it('sem time waiting e sem substituto: a vaga fica vazia', async () => {
     const rid = await testRoundId();
     for (const name of ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'Bench']) {
       await addPlayer(name);
@@ -415,15 +417,16 @@ describe('removePlayer', () => {
     const inField = teams.find((t) => t.status === 'in_field');
     const victimId = inField.players[0];
     const { substituted } = await removePlayer(victimId, 'injured', false, rid, 3);
-    expect(substituted).toBe(true);
+    expect(substituted).toBe(false);
 
     const players = await getPlayers();
     expect(players.find((p) => p.id === victimId).status).toBe('injured');
     const bench = players.find((p) => p.name === 'Bench');
-    expect(bench.status).toBe('in_field');
+    expect(bench.status).toBe('available');
     const fieldAfter = (await getTeams(rid)).find((t) => t.id === inField.id);
-    expect(fieldAfter.players).toContain(bench.id);
+    expect(fieldAfter.players).not.toContain(bench.id);
     expect(fieldAfter.players).not.toContain(victimId);
+    expect(fieldAfter.players).toHaveLength(2);
   });
 
   it('deve rejeitar motivo inválido', async () => {
@@ -502,7 +505,7 @@ describe('removePlayer', () => {
     expect(waitingTeams[0].players.includes(j12.id)).toBe(false);
   });
 
-  it('lesão em jogador do próximo time (waiting): substitui e cascateia como em campo', async () => {
+  it('lesão em waiting sem puxar outro: o time abaixo do tamanho dissolve', async () => {
     const rid = await testRoundId();
     for (let i = 1; i <= 12; i += 1) {
       await addPlayer(`P${i}`);
@@ -514,12 +517,16 @@ describe('removePlayer', () => {
     const waitingTeams = (await getTeams(rid)).filter((t) => t.status === 'waiting');
     expect(waitingTeams).toHaveLength(1);
     const victimId = waitingTeams[0].players[0];
+    const teammates = waitingTeams[0].players.filter((id) => id !== victimId);
     const { substituted } = await removePlayer(victimId, 'injured', false, rid, 3);
-    expect(substituted).toBe(true);
+    expect(substituted).toBe(false);
     const teamsAfter = await getTeams(rid);
-    expect(teamsAfter.filter((t) => t.status === 'waiting').length).toBeGreaterThanOrEqual(1);
-    const victim = (await getPlayers()).find((p) => p.id === victimId);
-    expect(victim.status).toBe('injured');
+    expect(teamsAfter.filter((t) => t.status === 'waiting')).toHaveLength(0);
+    const players = await getPlayers();
+    expect(players.find((p) => p.id === victimId).status).toBe('injured');
+    for (const tid of teammates) {
+      expect(players.find((p) => p.id === tid).status).toBe('available');
+    }
   });
 
   it('lesão em waiting sem substituto: dissolve o time e libera o elenco', async () => {
@@ -577,6 +584,56 @@ describe('removePlayer', () => {
     const after = (await getPlayers()).find((x) => x.id === alpha.id);
     expect(after.status).toBe('available');
     expect(new Date(after.joinedAt).getTime()).toBeGreaterThan(0);
+  });
+
+  it('cansado em campo coloca o jogador escolhido na vaga', async () => {
+    const rid = await testRoundId();
+    for (const name of ['A1', 'A2', 'A3', 'Bench']) {
+      await addPlayer(name);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    await formTeam(3, rid);
+    const field = (await getTeams(rid)).find((t) => t.status === 'in_field');
+    const outgoing = (await getPlayers()).find((p) => p.id === field.players[0]);
+    const bench = (await getPlayers()).find((p) => p.name === 'Bench');
+    const benchJoinedAt = bench.joinedAt;
+
+    await replaceFieldPlayerWith(outgoing.id, bench.id, rid, 3);
+
+    const players = await getPlayers();
+    const tired = players.find((p) => p.id === outgoing.id);
+    const seated = players.find((p) => p.id === bench.id);
+    expect(tired.status).toBe('tired');
+    expect(tired.joinedAt).not.toBe(benchJoinedAt);
+    expect(seated.status).toBe('in_field');
+    expect(seated.joinedAt).toBe(benchJoinedAt);
+    const fieldAfter = (await getTeams(rid)).find((t) => t.id === field.id);
+    expect(fieldAfter.players).toContain(bench.id);
+    expect(fieldAfter.players).not.toContain(outgoing.id);
+  });
+
+  it('sub troca a vaga e a posição na fila, sem marcar cansado', async () => {
+    const rid = await testRoundId();
+    for (const name of ['A1', 'A2', 'A3', 'Bench']) {
+      await addPlayer(name);
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    await formTeam(3, rid);
+    const field = (await getTeams(rid)).find((t) => t.status === 'in_field');
+    const outgoing = (await getPlayers()).find((p) => p.id === field.players[0]);
+    const bench = (await getPlayers()).find((p) => p.name === 'Bench');
+
+    await swapRosterPlayer(outgoing.id, bench.id, rid, 3);
+
+    const players = await getPlayers();
+    const left = players.find((p) => p.id === outgoing.id);
+    const seated = players.find((p) => p.id === bench.id);
+    expect(left.status).toBe('available');
+    expect(left.joinedAt).toBe(bench.joinedAt);
+    expect(seated.status).toBe('in_field');
+    expect(seated.joinedAt).toBe(outgoing.joinedAt);
+    const fieldAfter = (await getTeams(rid)).find((t) => t.id === field.id);
+    expect(fieldAfter.players[0]).toBe(bench.id);
   });
 });
 

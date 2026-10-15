@@ -112,6 +112,7 @@ export default function MatchHistory({
                       type="button"
                       className="btn btn-outline btn-sm"
                       onClick={() => onEditScheduledMatch(match)}
+                      aria-label={`Editar partida ${labelForTeam(match.teamA)} × ${labelForTeam(match.teamB)}`}
                     >
                       Editar
                     </button>
@@ -121,6 +122,7 @@ export default function MatchHistory({
                       type="button"
                       className="btn btn-outline btn-sm btn-danger-outline"
                       onClick={() => onDeleteMatch(match.id, match.status)}
+                      aria-label={`Excluir partida ${labelForTeam(match.teamA)} × ${labelForTeam(match.teamB)}`}
                     >
                       Excluir
                     </button>

@@ -49,6 +49,11 @@ export default function GoalkeeperQueuePanel({ players = [], onDeletePlayer }) {
                         ? 'Excluir goleiro (remove do cadastro)'
                         : 'Remover da lista de goleiros (jogador continua na fila de linha)'
                     }
+                    aria-label={
+                      player.goalkeeperOnly
+                        ? `Excluir goleiro ${player.name || ''}`.trim()
+                        : `Remover ${player.name || ''} da lista de goleiros`.trim()
+                    }
                   >
                     Excluir
                   </button>

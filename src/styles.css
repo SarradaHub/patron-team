@@ -1799,6 +1799,23 @@ textarea {
   width: 56px;
 }
 
+.substitute-picker-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--cor-texto);
+}
+
 .modal-actions {
   display: flex;
   flex-wrap: wrap;

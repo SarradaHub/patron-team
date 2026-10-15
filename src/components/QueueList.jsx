@@ -5,7 +5,10 @@ import React, { useMemo } from 'react';
  *
  * @param {object} props
  * @param {Array} props.players
- * @param {function} props.onRemove
+ * @param {function} props.onRemove — cansado fora de campo
+ * @param {function} [props.onFieldTired] — cansado em campo, pede quem entra
+ * @param {function} [props.onSubstitute] — troca de escalação
+ * @param {Set<string>} [props.rosterPlayerIds]
  * @param {function} [props.onRestore] — lesionado/cansado → disponível (fim da fila)
  * @param {function} [props.onEditPlayer] — abre edição do nome do jogador
  * @param {function} [props.onDeletePlayer] — exclui o jogador (o caller confirma)
@@ -17,6 +20,9 @@ function PlayerRow({
   statusText,
   statusClass,
   onRemove,
+  onFieldTired,
+  onSubstitute,
+  onRoster = false,
   onRestore,
   onEditPlayer,
   onDeletePlayer,
@@ -35,6 +41,7 @@ function PlayerRow({
               type="button"
               className="btn btn-outline btn-sm"
               onClick={() => onEditPlayer(player)}
+              aria-label={`Editar jogador ${player.name || ''}`.trim()}
             >
               Editar
             </button>
@@ -44,6 +51,7 @@ function PlayerRow({
               type="button"
               className="btn btn-outline btn-sm btn-danger-outline"
               onClick={() => onDeletePlayer(player.id)}
+              aria-label={`Excluir jogador ${player.name || ''}`.trim()}
             >
               Excluir
             </button>
@@ -54,28 +62,19 @@ function PlayerRow({
         <div className="player-actions">
           <button
             type="button"
-            className="btn btn-queue-injury btn-queue-icon"
-            onClick={() => onRemove(player.id, 'injured', false)}
-            title="Lesão — marcar como lesionado"
-            aria-label="Lesão — marcar como lesionado"
-          >
-            Lesão
-          </button>
-          <button
-            type="button"
             className="btn btn-queue-tired btn-queue-icon"
-            onClick={() => onRemove(player.id, 'tired', false)}
-            title="Cansado — marcar como cansado"
-            aria-label="Cansado — marcar como cansado"
+            onClick={() => onFieldTired?.(player)}
+            title="Cansado — escolher quem entra"
+            aria-label="Cansado — escolher quem entra"
           >
             Cansado
           </button>
           <button
             type="button"
             className="btn btn-queue-sub btn-queue-icon"
-            onClick={() => onRemove(player.id, 'tired', true)}
-            title="Substituir — próximo da fila"
-            aria-label="Substituir — próximo da fila"
+            onClick={() => onSubstitute?.(player)}
+            title="Substituir — escolher jogador"
+            aria-label="Substituir — escolher jogador"
           >
             Sub
           </button>
@@ -85,15 +84,6 @@ function PlayerRow({
         <div className="player-actions player-actions-bench">
           <button
             type="button"
-            className="btn btn-queue-injury btn-queue-icon"
-            onClick={() => onRemove(player.id, 'injured', false)}
-            title="Lesão — marcar como lesionado (fora de campo)"
-            aria-label="Lesão — marcar como lesionado (fora de campo)"
-          >
-            Lesão
-          </button>
-          <button
-            type="button"
             className="btn btn-queue-tired btn-queue-icon"
             onClick={() => onRemove(player.id, 'tired', false)}
             title="Cansado — marcar como cansado (fora de campo)"
@@ -101,6 +91,17 @@ function PlayerRow({
           >
             Cansado
           </button>
+          {onRoster && (
+            <button
+              type="button"
+              className="btn btn-queue-sub btn-queue-icon"
+              onClick={() => onSubstitute?.(player)}
+              title="Substituir — escolher jogador"
+              aria-label="Substituir — escolher jogador"
+            >
+              Sub
+            </button>
+          )}
         </div>
       )}
       {(player.status === 'tired' || player.status === 'injured') && onRestore && (
@@ -126,6 +127,9 @@ function PlayerRow({
 export default function QueueList({
   players,
   onRemove,
+  onFieldTired,
+  onSubstitute,
+  rosterPlayerIds,
   onRestore,
   onEditPlayer,
   onDeletePlayer,
@@ -180,6 +184,9 @@ export default function QueueList({
               statusText={statusText}
               statusClass={statusClass}
               onRemove={onRemove}
+              onFieldTired={onFieldTired}
+              onSubstitute={onSubstitute}
+              onRoster={rosterPlayerIds?.has(player.id)}
               onRestore={onRestore}
               onEditPlayer={onEditPlayer}
               onDeletePlayer={onDeletePlayer}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import {
   SCHEDULED_MATCH_TIMER_MAX_MINUTES,
   SCHEDULED_MATCH_TIMER_MIN_MINUTES,
@@ -38,6 +39,7 @@ export default function Controls({
   const [addAsGoalkeeperOnly, setAddAsGoalkeeperOnly] = useState(false);
   const playerNameInputRef = useRef(null);
   const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
+  const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState(false);
   const fileInputRef = useRef(null);
   const [minDraft, setMinDraft] = useState('10');
 
@@ -72,7 +74,7 @@ export default function Controls({
         const json = JSON.parse(event.target.result);
         onImport(json);
       } catch {
-        alert('Erro ao ler arquivo JSON. Verifique o formato.');
+        toast.error('Erro ao ler arquivo JSON. Verifique o formato.');
       }
     };
     reader.readAsText(file);
@@ -110,8 +112,12 @@ export default function Controls({
 
       <section className="control-section">
         <h3>Adicionar jogador</h3>
+        <label className="field-label" htmlFor="add-player-name">
+          Nome
+        </label>
         <form onSubmit={handleAddPlayer} className="add-player-form">
           <input
+            id="add-player-name"
             type="text"
             data-testid="add-player-input"
             ref={playerNameInputRef}
@@ -365,14 +371,23 @@ export default function Controls({
           type="button"
           className="btn btn-outline"
           disabled={!canAct}
-          onClick={() => {
-            if (window.confirm('Executar manutenção de dados agora?')) {
-              onRunMaintenance();
-            }
-          }}
+          onClick={() => setShowMaintenanceConfirm(true)}
         >
           Limpar referências
         </button>
+        {showMaintenanceConfirm && (
+          <ConfirmDialog
+            title="Manutenção"
+            message="Executar manutenção de dados agora?"
+            confirmLabel="Confirmar"
+            cancelLabel="Cancelar"
+            onCancel={() => setShowMaintenanceConfirm(false)}
+            onConfirm={() => {
+              setShowMaintenanceConfirm(false);
+              onRunMaintenance();
+            }}
+          />
+        )}
       </section>
     </div>
   );
