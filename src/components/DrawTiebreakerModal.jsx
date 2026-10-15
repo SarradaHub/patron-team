@@ -1,5 +1,6 @@
 import React from 'react';
 import { labelMatchSide } from '../domain/teamLabels.js';
+import ModalFrame from './ModalFrame.jsx';
 
 /**
  * Empate com um time waiting na fila: escolher qual time (A ou B) leva vantagem na fila.
@@ -10,7 +11,7 @@ export default function DrawTiebreakerModal({ match, teams, onPick, onCancel }) 
   const sideLineB = labelMatchSide(match.teamB, 'B', teamMap);
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <ModalFrame onClose={onCancel}>
       <div className="modal-content match-stats-modal">
         <h3>Desempate na fila</h3>
         <p className="modal-sub">
@@ -39,6 +40,6 @@ export default function DrawTiebreakerModal({ match, teams, onPick, onCancel }) 
           </button>
         </div>
       </div>
-    </div>
+    </ModalFrame>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import ModalFrame from './ModalFrame.jsx';
 
 function isStatusAvailableForAdd(v) {
   if (v === 'available') return true;
@@ -92,7 +93,7 @@ export default function EditTeamModal({
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-team-title">
+    <ModalFrame onClose={onClose} labelledBy="edit-team-title">
       <div className="modal-content match-stats-modal edit-team-modal">
         <h3 id="edit-team-title">Editar time</h3>
         <p className="modal-sub">
@@ -212,6 +213,6 @@ export default function EditTeamModal({
           </div>
         </form>
       </div>
-    </div>
+    </ModalFrame>
   );
 }
