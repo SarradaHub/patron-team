@@ -5,6 +5,7 @@ import {
   SCHEDULED_MATCH_TIMER_MIN_MINUTES,
 } from '../api/indexeddb.js';
 import { formatCountdownRemainingMs } from '../domain/countdownFormat.js';
+import { teamSizeFromInput } from '../domain/teamSize.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
 
 const CLEAR_CACHE_CONFIRM_MESSAGE =
@@ -173,7 +174,14 @@ export default function Controls({
             min="1"
             max="20"
             value={teamSize}
-            onChange={(e) => onTeamSizeChange(Number(e.target.value))}
+            onChange={(e) => {
+              const next = teamSizeFromInput(e.target.value);
+              if (next == null) {
+                e.target.value = String(teamSize);
+                return;
+              }
+              onTeamSizeChange(next);
+            }}
             className="input-number"
           />
           <button

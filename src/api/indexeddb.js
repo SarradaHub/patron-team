@@ -17,6 +17,7 @@ import {
 } from '../domain/goalkeeperEligibility.js';
 import { suggestNextMatch as computeSuggestNextMatch } from '../domain/nextMatchEngine.js';
 import { planNextMatch } from '../domain/postMatchFlow.js';
+import { assertValidTeamSize, rosterMeetsTeamSize } from '../domain/teamSize.js';
 import { sortWaitingTeamsForRound } from '../domain/waitingQueueOrder.js';
 
 const DB_NAME = 'teamQueueDB';
@@ -625,9 +626,7 @@ function stripWaitingQueueFields(team) {
  */
 export async function formTeam(size, roundId) {
   if (!roundId) throw new Error('roundId é obrigatório.');
-  if (!size || size < 1) {
-    throw new Error('Tamanho do time deve ser maior que zero.');
-  }
+  assertValidTeamSize(size);
 
   const db = await openDB();
   const tx = db.transaction(['players', 'teams', 'rounds'], 'readwrite');
@@ -2101,16 +2100,14 @@ function applyNextMatchPlan({
 
 export async function scheduleMatch(roundId, teamAId, teamBId, options = {}) {
   const teamSize = options.teamSize ?? 5;
+  assertValidTeamSize(teamSize);
   const db = await openDB();
   const tx = db.transaction(['teams', 'matches'], 'readwrite');
   const teamsStore = tx.objectStore('teams');
   const matchesStore = tx.objectStore('matches');
   const now = new Date().toISOString();
 
-  const rosterOk = (team) =>
-    !teamSize ||
-    teamSize < 1 ||
-    (team?.players?.length ?? 0) >= teamSize;
+  const rosterOk = (team) => rosterMeetsTeamSize(team, teamSize);
 
   return new Promise((resolve, reject) => {
     const a = teamsStore.get(teamAId);
@@ -2187,6 +2184,7 @@ export async function finalizeMatch(matchId, result, options = {}) {
   const teamsBefore = await getTeams(roundId);
   const playersBefore = await getPlayers(false);
   const rosterSz = options.teamSize ?? 5;
+  assertValidTeamSize(rosterSz);
   const preWaitingTeamIds = fifoPreWaitingTeamIds(
     teamsBefore,
     roundId,
@@ -2338,10 +2336,6 @@ export async function finalizeMatch(matchId, result, options = {}) {
   });
 }
 
-function rosterOkForSchedule(team, teamSize) {
-  return !teamSize || teamSize < 1 || (team?.players?.length ?? 0) >= teamSize;
-}
-
 function deletePlayerStatsByMatchCursor(statsStore, matchId, onDone, onError) {
   const clearReq = statsStore.index('matchId').openCursor(matchId);
   clearReq.onsuccess = (e) => {
@@ -2361,6 +2355,7 @@ function deletePlayerStatsByMatchCursor(statsStore, matchId, onDone, onError) {
  */
 export async function updateScheduledMatchTeams(matchId, teamAId, teamBId, options = {}) {
   const teamSize = options.teamSize ?? 5;
+  assertValidTeamSize(teamSize);
   if (teamAId === teamBId) {
     throw new Error('Os dois times da partida devem ser diferentes.');
   }
@@ -2396,7 +2391,7 @@ export async function updateScheduledMatchTeams(matchId, teamAId, teamBId, optio
             reject(new Error('Times inválidos para a rodada.'));
             return;
           }
-          if (!rosterOkForSchedule(teamA, teamSize) || !rosterOkForSchedule(teamB, teamSize)) {
+          if (!rosterMeetsTeamSize(teamA, teamSize) || !rosterMeetsTeamSize(teamB, teamSize)) {
             tx.abort();
             reject(
               new Error(
