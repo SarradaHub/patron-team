@@ -1,10 +1,10 @@
-# Arjen Queue IndexedDB ⚽
+# Fila de Times ⚽
 
 > Web app offline-first para gerenciar filas de jogadores e formar times usando IndexedDB.
 
 ## Visão Geral
 
-O **Arjen Queue** é uma aplicação React que funciona completamente offline, usando IndexedDB como banco de dados local. Ideal para organizar peladas e jogos recreativos, a app gerencia uma fila FIFO (primeiro a chegar, primeiro a jogar) de jogadores, forma times automaticamente, trata lesões/substituições e registra resultados de partidas.
+**Fila de Times** é uma aplicação React que funciona completamente offline, usando IndexedDB como banco de dados local. Ideal para organizar peladas e jogos recreativos, a app gerencia uma fila FIFO (primeiro a chegar, primeiro a jogar) de jogadores, forma times automaticamente, trata lesões/substituições e registra resultados de partidas.
 
 ### Principais funcionalidades
 
@@ -261,5 +261,3 @@ vercel
 ## Licença
 
 MIT
-
-# arjen-pro

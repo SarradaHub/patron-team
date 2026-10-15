@@ -41,6 +41,8 @@ import {
   deleteDatabase,
   ensureDefaultActiveRound,
   getActiveRoundId,
+  getRound,
+  updateRoundName,
   finalizeMatch,
   getRoundStatistics,
   getGlobalPlayerStatistics,
@@ -1358,6 +1360,23 @@ describe('stress flow: alta carga com fadiga e substituição', () => {
     expect(playersAfter).toHaveLength(playerCount);
     expect(substitutions).toBeGreaterThanOrEqual(5);
     expect(tiredOrInjured.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('updateRoundName', () => {
+  it('grava o nome e vazio volta ao rótulo com data', async () => {
+    const id = await testRoundId();
+    const renamed = await updateRoundName(id, 'Sábado');
+    expect(renamed.name).toBe('Sábado');
+    expect((await getRound(id)).name).toBe('Sábado');
+
+    const fallback = await updateRoundName(id, '   ');
+    expect(fallback.name.startsWith('Rodada ')).toBe(true);
+    expect(fallback.name).not.toBe('Sábado');
+  });
+
+  it('rejeita rodada inexistente', async () => {
+    await expect(updateRoundName('no-such-round', 'Nome')).rejects.toThrow('Rodada não encontrada.');
   });
 });
 

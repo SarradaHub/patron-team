@@ -74,7 +74,7 @@ When('I open global stats tab', async function () {
 });
 
 Then('I should see player stats table', async function () {
-  await expect(this.page.getByRole('heading', { name: '📊 Estatísticas de Jogadores' })).toBeVisible();
+  await expect(this.page.getByRole('heading', { name: 'Estatísticas de jogadores' })).toBeVisible();
 });
 
 When('I open round stats tab', async function () {

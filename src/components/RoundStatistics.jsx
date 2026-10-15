@@ -28,9 +28,19 @@ export default function RoundStatistics({ rows }) {
     }
   };
 
-  const sortIcon = (column) => {
-    if (sortBy !== column) return '↕️';
-    return sortDir === 'asc' ? '⬆️' : '⬇️';
+  const sortState = (column) => {
+    if (sortBy !== column) return 'none';
+    return sortDir === 'asc' ? 'asc' : 'desc';
+  };
+
+  const sortCue = (column) => {
+    const word = sortState(column) === 'asc' ? 'menor' : sortState(column) === 'desc' ? 'maior' : '';
+    return (
+      <>
+        <span className={`sort-mark sort-mark--${sortState(column)}`} aria-hidden="true" />
+        {word ? <span className="visually-hidden"> {word}</span> : null}
+      </>
+    );
   };
 
   const sorted = useMemo(() => {
@@ -74,7 +84,7 @@ export default function RoundStatistics({ rows }) {
                 className={col.key === 'name' ? 'sortable' : 'sortable stats-th-stat'}
                 onClick={() => handleSort(col.key)}
               >
-                {col.label} {sortIcon(col.key)}
+                {col.label} {sortCue(col.key)}
               </th>
             ))}
           </tr>
