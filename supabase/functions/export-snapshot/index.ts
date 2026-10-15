@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { authorizeSnapshotExport } from '../_shared/exportAllowList.js';
 
 const CHUNK_SIZE = 500;
 
@@ -142,6 +143,12 @@ function validatePayload(body: unknown): ExportPayload | null {
   return body as ExportPayload;
 }
 
+function bearerToken(header: string | null): string {
+  if (!header) return '';
+  const match = /^Bearer\s+(\S+)/i.exec(header.trim());
+  return match?.[1] ?? '';
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -179,6 +186,18 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  const token = bearerToken(req.headers.get('Authorization'));
+  let user: { email?: string | null } | null = null;
+  if (token) {
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (!userError && userData?.user) user = userData.user;
+  }
+
+  const decision = authorizeSnapshotExport(user, Deno.env.get('EXPORT_ALLOWED_EMAILS'));
+  if (!decision.allowed) {
+    return jsonResponse({ ok: false, error: decision.error }, decision.status);
+  }
 
   const { data: existing, error: lookupError } = await supabase
     .from('export_batches')

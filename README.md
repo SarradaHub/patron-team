@@ -9,13 +9,16 @@
 - Agende a partida e grave o resultado no card.
 - **Bloquear time** tira um time em campo da próxima sugestão e do rebalanceamento.
 - **Rebalancear** fica fechado em Times em campo e só mistura quando há dois times em campo desbloqueados.
-- **Enviar para nuvem** manda um snapshot. **Importar dados** pede confirmação e recusa um arquivo que não seja três listas.
+- **Enviar para nuvem** pede Entrar. A conta nasce no painel do Supabase. **Sair** esquece só essa sessão.
+- **Importar dados** pede confirmação e recusa um arquivo que não seja três listas.
 
 ## ℹ️ Visão geral
 
 A Fila de Times serve para uma pelada, num celular ou notebook. Os jogadores esperam numa fila, o app forma os times e grava o resultado no IndexedDB daquele navegador. Sem internet, a noite continua.
 
-Um botão pode enviar uma cópia (jogadores, times, partidas, rodadas e estatísticas) para a nuvem. A nuvem não substitui o aparelho: o restore local é um arquivo JSON.
+Um botão pode enviar uma cópia (jogadores, times, partidas, rodadas e estatísticas) para a nuvem. A nuvem não substitui o aparelho: o restore local é um arquivo JSON. Sem sessão, **Enviar para nuvem** abre Entrar (e-mail e senha). Não há cadastro no app. Depois de entrar, o snapshot que estava esperando segue, e o navegador fica nessa sessão até **Sair**. Sair não apaga a pelada local.
+
+O servidor grava o snapshot só se o e-mail estiver em `EXPORT_ALLOWED_EMAILS`, segredo da função `export-snapshot`, com e-mails separados por vírgula. Lista vazia ou ausente recusa todo mundo. Essa variável não entra no build do site.
 
 ### ✍️ Onde está no ar
 
@@ -56,7 +59,9 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
-Os nomes também estão em [`.env.example`](.env.example).
+`EXPORT_ALLOWED_EMAILS` fica só na Edge Function, no painel do Supabase. Não use o prefixo `VITE_` nem `NEXT_PUBLIC_`, e não a coloque no workflow de GitHub Pages.
+
+Os nomes do cliente também estão em [`.env.example`](.env.example).
 
 ## 💭 Feedback
 
