@@ -57,13 +57,32 @@ describe('exportToSupabase', () => {
 
     const otherSnapshot = {
       ...sampleExport,
-      exportedAt: '2026-05-24T18:00:00.000Z',
+      players: [{ id: 'p2', name: 'Bia', status: 'available', joinedAt: '2026-01-01T11:00:00.000Z' }],
     };
     await expect(exportToSupabase(otherSnapshot)).rejects.toThrow(/Network error/);
 
     const firstId = invokeMock.mock.calls[0][1].body.exportId;
     const secondId = invokeMock.mock.calls[1][1].body.exportId;
     expect(secondId).not.toBe(firstId);
+  });
+
+  it('reusa o export id quando as mesmas entidades têm exportedAt diferente depois de um envio falho', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: { message: 'Network error' },
+    });
+
+    await expect(exportToSupabase(sampleExport)).rejects.toThrow(/Network error/);
+
+    const sameEntitiesLater = {
+      ...sampleExport,
+      exportedAt: '2026-05-24T18:00:00.000Z',
+    };
+    await expect(exportToSupabase(sameEntitiesLater)).rejects.toThrow(/Network error/);
+
+    const firstId = invokeMock.mock.calls[0][1].body.exportId;
+    const secondId = invokeMock.mock.calls[1][1].body.exportId;
+    expect(secondId).toBe(firstId);
   });
 
   it('gera um export id novo depois que o servidor aceita o snapshot', async () => {

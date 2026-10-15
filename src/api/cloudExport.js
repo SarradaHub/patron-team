@@ -5,7 +5,6 @@ const PENDING_EXPORT_KEY = 'patron-team-pending-export';
 function snapshotKey(data) {
   return JSON.stringify({
     schemaVersion: data.schemaVersion,
-    exportedAt: data.exportedAt,
     players: data.players ?? [],
     teams: data.teams ?? [],
     matches: data.matches ?? [],
