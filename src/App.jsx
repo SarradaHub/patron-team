@@ -2,9 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import toast, { Toaster } from 'react-hot-toast';
 import {
   addPlayer,
-  getPlayers,
-  getTeams,
-  getMatches,
   formAllTeamsPossible,
   removePlayer,
   replaceFieldPlayerWith,
@@ -24,15 +21,10 @@ import {
   exportData,
   importData,
   onChange,
-  ensureDefaultActiveRound,
-  getActiveRoundId,
   setActiveRoundId,
-  getRounds,
   updateRoundName,
   suggestNextMatchForRound,
-  getRoundStatistics,
-  getGlobalPlayerStatistics,
-  getMatchScoresForRound,
+  loadNightSnapshot,
   listPreWaitingTeamIds,
   runDatastoreMaintenance,
   toggleTeamBlocked,
@@ -73,6 +65,17 @@ function toastFinalized(saved) {
   );
 }
 
+const EMPTY_NIGHT = {
+  players: [],
+  teams: [],
+  matches: [],
+  rounds: [],
+  activeRoundId: null,
+  roundStatsRows: [],
+  globalStatsRows: [],
+  matchScores: {},
+};
+
 const TOAST_OPTIONS = {
   className: 'app-toast',
   duration: 4000,
@@ -84,14 +87,17 @@ const TOAST_OPTIONS = {
 };
 
 export default function App() {
-  const [players, setPlayers] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [matches, setMatches] = useState([]);
-  const [rounds, setRounds] = useState([]);
-  const [activeRoundId, setActiveRoundIdState] = useState(null);
-  const [roundStatsRows, setRoundStatsRows] = useState([]);
-  const [globalStatsRows, setGlobalStatsRows] = useState([]);
-  const [matchScores, setMatchScores] = useState({});
+  const [night, setNight] = useState(EMPTY_NIGHT);
+  const {
+    players,
+    teams,
+    matches,
+    rounds,
+    activeRoundId,
+    roundStatsRows,
+    globalStatsRows,
+    matchScores,
+  } = night;
   const [statsModalMatch, setStatsModalMatch] = useState(null);
   const [activeTab, setActiveTab] = useState('queue');
   const [teamSize, setTeamSize] = useState(5);
@@ -148,25 +154,17 @@ export default function App() {
 
   const refreshData = useCallback(async () => {
     try {
-      await ensureDefaultActiveRound();
-      const aid = await getActiveRoundId();
-      setActiveRoundIdState(aid);
-      const [p, t, m, r, stats, globalStats, scores] = await Promise.all([
-        getPlayers(),
-        aid ? getTeams(aid) : getTeams(),
-        aid ? getMatches(aid) : getMatches(),
-        getRounds(),
-        aid ? getRoundStatistics(aid) : Promise.resolve([]),
-        getGlobalPlayerStatistics(),
-        aid ? getMatchScoresForRound(aid) : Promise.resolve({}),
-      ]);
-      setPlayers(p);
-      setTeams(t);
-      setMatches(m);
-      setRounds(r);
-      setRoundStatsRows(stats);
-      setGlobalStatsRows(globalStats);
-      setMatchScores(scores);
+      const snap = await loadNightSnapshot();
+      setNight({
+        players: snap.players,
+        teams: snap.teams,
+        matches: snap.matches,
+        rounds: snap.rounds,
+        activeRoundId: snap.activeRoundId,
+        roundStatsRows: snap.roundStats,
+        globalStatsRows: snap.globalStats,
+        matchScores: snap.matchScores,
+      });
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
       toast.error('Erro ao carregar dados do banco.');

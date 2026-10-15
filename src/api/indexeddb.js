@@ -123,11 +123,15 @@ export function openDB() {
         matchesGetAll.onsuccess = () => {
           for (const m of matchesGetAll.result) {
             m.roundId = roundId;
-            m.status = 'finalized';
-            m.draw = m.result === 'draw';
-            if (m.result === 'A_win') m.winningTeamId = m.teamA;
-            else if (m.result === 'B_win') m.winningTeamId = m.teamB;
-            else m.winningTeamId = null;
+            if (m.result == null) {
+              m.status = 'scheduled';
+            } else {
+              m.status = 'finalized';
+              m.draw = m.result === 'draw';
+              if (m.result === 'A_win') m.winningTeamId = m.teamA;
+              else if (m.result === 'B_win') m.winningTeamId = m.teamB;
+              else m.winningTeamId = null;
+            }
             matchesStore.put(m);
           }
         };
@@ -271,39 +275,52 @@ export async function addPlayer(name, { goalkeeperOnly = false } = {}) {
     throw new Error('Nome do jogador é obrigatório.');
   }
 
-  const existing = await getPlayers(true);
-  let joinedMs = Date.now();
-  if (existing.length > 0) {
-    const last = existing[existing.length - 1];
-    const lastMs = Date.parse(last.joinedAt);
-    if (!Number.isNaN(lastMs)) {
-      joinedMs = Math.max(joinedMs, lastMs + 1);
-    }
-  }
-
   const db = await openDB();
   const gkOnly = Boolean(goalkeeperOnly);
-  const player = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    status: 'available',
-    joinedAt: new Date(joinedMs).toISOString(),
-    goals: 0,
-    assists: 0,
-    preferGoalkeeper: gkOnly,
-    goalkeeperOnly: gkOnly,
-  };
-
   const tx = db.transaction('players', 'readwrite');
-  tx.objectStore('players').add(player);
+  const store = tx.objectStore('players');
 
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => {
-      notifyChange('player_added');
-      resolve(player);
+  const player = await new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
     };
-    tx.onerror = () => reject(tx.error);
+    const cursorReq = store.index('joinedAt').openCursor(null, 'prev');
+    cursorReq.onerror = () => fail(cursorReq.error);
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      let joinedMs = Date.now();
+      if (cursor?.value?.joinedAt) {
+        const lastMs = Date.parse(cursor.value.joinedAt);
+        if (!Number.isNaN(lastMs)) {
+          joinedMs = Math.max(joinedMs, lastMs + 1);
+        }
+      }
+      const created = {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        status: 'available',
+        joinedAt: new Date(joinedMs).toISOString(),
+        goals: 0,
+        assists: 0,
+        preferGoalkeeper: gkOnly,
+        goalkeeperOnly: gkOnly,
+      };
+      store.add(created);
+      tx.oncomplete = () => {
+        if (settled) return;
+        settled = true;
+        notifyChange('player_added');
+        resolve(created);
+      };
+    };
+    tx.onerror = () => fail(tx.error);
+    tx.onabort = () => fail(tx.error || new Error('Transação abortada.'));
   });
+
+  return player;
 }
 
 export async function getPlayers(orderByJoinedAt = true) {
@@ -1867,16 +1884,47 @@ export const SCHEDULED_MATCH_TIMER_MAX_MINUTES = 180;
 
 const DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES = 10;
 
-async function putMatchRow(match) {
+/**
+ * Lê a partida e grava só os campos do cronômetro na mesma transação,
+ * e só enquanto status continua `scheduled`.
+ */
+async function patchScheduledMatchTimer(matchId, mutate) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('matches', 'readwrite');
-    tx.objectStore('matches').put(match);
-    tx.oncomplete = () => {
-      notifyChange('match_timer_updated');
-      resolve();
+    const store = tx.objectStore('matches');
+    let abortReason = null;
+    const fail = (err) => {
+      abortReason = err;
+      try {
+        tx.abort();
+      } catch {
+        reject(err);
+      }
     };
-    tx.onerror = () => reject(tx.error);
+    const req = store.get(matchId);
+    req.onsuccess = () => {
+      const match = req.result;
+      if (!match || match.status !== 'scheduled') {
+        fail(new Error('Partida agendada não encontrada.'));
+        return;
+      }
+      let next;
+      try {
+        next = mutate(match);
+      } catch (err) {
+        fail(err);
+        return;
+      }
+      store.put(next);
+      tx.oncomplete = () => {
+        notifyChange('match_timer_updated');
+        resolve();
+      };
+    };
+    req.onerror = () => reject(req.error);
+    tx.onerror = () => reject(abortReason || tx.error);
+    tx.onabort = () => reject(abortReason || tx.error || new Error('Transação abortada.'));
   });
 }
 
@@ -1894,54 +1942,41 @@ export async function setScheduledMatchTimerDuration(matchId, minutes) {
       `Duração deve ser entre ${SCHEDULED_MATCH_TIMER_MIN_MINUTES} e ${SCHEDULED_MATCH_TIMER_MAX_MINUTES} minutos.`
     );
   }
-  const match = await getMatchById(matchId);
-  if (!match || match.status !== 'scheduled') {
-    throw new Error('Partida agendada não encontrada.');
-  }
-  if (match.countdownEndsAt) {
-    throw new Error('Pare o cronômetro (Zerar) para alterar a duração.');
-  }
-  await putMatchRow({ ...match, timerDurationMinutes: m });
+  await patchScheduledMatchTimer(matchId, (match) => {
+    if (match.countdownEndsAt) {
+      throw new Error('Pare o cronômetro (Zerar) para alterar a duração.');
+    }
+    return { ...match, timerDurationMinutes: m };
+  });
 }
 
 /**
  * Inicia contagem regressiva a partir de timerDurationMinutes (padrão 10 se ausente).
  */
 export async function startScheduledMatchCountdown(matchId) {
-  const match = await getMatchById(matchId);
-  if (!match || match.status !== 'scheduled') {
-    throw new Error('Partida agendada não encontrada.');
-  }
-  const minsRaw = match.timerDurationMinutes ?? DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES;
-  const mins = Math.round(Number(minsRaw));
-  if (
-    !Number.isFinite(mins) ||
-    mins < SCHEDULED_MATCH_TIMER_MIN_MINUTES ||
-    mins > SCHEDULED_MATCH_TIMER_MAX_MINUTES
-  ) {
-    throw new Error('Defina uma duração válida antes de iniciar.');
-  }
-  const countdownEndsAt = new Date(Date.now() + mins * 60 * 1000).toISOString();
-  await putMatchRow({ ...match, timerDurationMinutes: mins, countdownEndsAt });
+  await patchScheduledMatchTimer(matchId, (match) => {
+    const minsRaw = match.timerDurationMinutes ?? DEFAULT_SCHEDULED_MATCH_TIMER_MINUTES;
+    const mins = Math.round(Number(minsRaw));
+    if (
+      !Number.isFinite(mins) ||
+      mins < SCHEDULED_MATCH_TIMER_MIN_MINUTES ||
+      mins > SCHEDULED_MATCH_TIMER_MAX_MINUTES
+    ) {
+      throw new Error('Defina uma duração válida antes de iniciar.');
+    }
+    const countdownEndsAt = new Date(Date.now() + mins * 60 * 1000).toISOString();
+    return { ...match, timerDurationMinutes: mins, countdownEndsAt };
+  });
 }
 
 /** Para o cronômetro sem alterar a duração configurada. */
 export async function clearScheduledMatchCountdown(matchId) {
-  const match = await getMatchById(matchId);
-  if (!match || match.status !== 'scheduled') {
-    throw new Error('Partida agendada não encontrada.');
-  }
-  await putMatchRow({ ...match, countdownEndsAt: null });
+  await patchScheduledMatchTimer(matchId, (match) => ({ ...match, countdownEndsAt: null }));
 }
 
 /** Soma gols + gols contra do adversário em player_stats (placar na lista de partidas). */
-export async function getMatchScoresForRound(roundId) {
-  const matches = await getMatches(roundId);
+function matchScoresForMatches(matches, allStats, roundId) {
   if (!matches.length) return {};
-  const db = await openDB();
-  const allStats = await promisify(
-    db.transaction('player_stats', 'readonly').objectStore('player_stats').getAll()
-  );
   const byMatchId = {};
   for (const m of matches) {
     byMatchId[m.id] = { teamA: m.teamA, teamB: m.teamB, scoreA: 0, scoreB: 0 };
@@ -1961,6 +1996,16 @@ export async function getMatchScoresForRound(roundId) {
     }
   }
   return byMatchId;
+}
+
+export async function getMatchScoresForRound(roundId) {
+  const matches = await getMatches(roundId);
+  if (!matches.length) return {};
+  const db = await openDB();
+  const allStats = await promisify(
+    db.transaction('player_stats', 'readonly').objectStore('player_stats').getAll()
+  );
+  return matchScoresForMatches(matches, allStats, roundId);
 }
 
 function fifoPreWaitingTeamIds(teams, roundId, players, rosterTargetSize) {
@@ -2764,6 +2809,103 @@ export async function getGlobalPlayerStatistics() {
     statsRows: allStats || [],
     finalizedMatches: finalized,
   });
+}
+
+const NIGHT_STORES = ['players', 'teams', 'matches', 'rounds', 'meta', 'player_stats'];
+
+function metaValue(meta, key) {
+  const row = (meta || []).find((item) => item.key === key);
+  return row ? row.value : null;
+}
+
+function withMetaValue(meta, key, value) {
+  const next = (meta || []).filter((item) => item.key !== key);
+  next.push({ key, value });
+  return next;
+}
+
+/**
+ * Um momento da noite: as seis stores numa transação readonly.
+ * Placar, estatísticas da rodada e estatísticas globais saem do mesmo array de stats.
+ */
+export async function loadNightSnapshot() {
+  const db = await openDB();
+  const tx = db.transaction(NIGHT_STORES, 'readonly');
+  const [playersRaw, teamsRaw, matchesRaw, roundsRaw, metaRaw, statsRaw] = await Promise.all([
+    promisify(tx.objectStore('players').getAll()),
+    promisify(tx.objectStore('teams').getAll()),
+    promisify(tx.objectStore('matches').getAll()),
+    promisify(tx.objectStore('rounds').getAll()),
+    promisify(tx.objectStore('meta').getAll()),
+    promisify(tx.objectStore('player_stats').getAll()),
+  ]);
+
+  let rounds = [...(roundsRaw || [])].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+  );
+  let meta = metaRaw || [];
+  let activeRoundId = metaValue(meta, 'activeRoundId');
+  const roundKnown = rounds.some((round) => round.id === activeRoundId);
+  if (!activeRoundId || !roundKnown) {
+    if (rounds.length === 0) {
+      const created = await createRound();
+      rounds = [created];
+      activeRoundId = created.id;
+    } else {
+      activeRoundId = rounds[0].id;
+      await setActiveRoundId(activeRoundId);
+    }
+    meta = withMetaValue(meta, 'activeRoundId', activeRoundId);
+  }
+
+  const players = [...(playersRaw || [])].sort(
+    (a, b) => new Date(a.joinedAt) - new Date(b.joinedAt)
+  );
+  const teams = activeRoundId
+    ? (teamsRaw || []).filter((team) => team.roundId === activeRoundId)
+    : [...(teamsRaw || [])];
+  const matches = activeRoundId
+    ? (matchesRaw || []).filter((match) => match.roundId === activeRoundId)
+    : [...(matchesRaw || [])];
+  const playerStats = statsRaw || [];
+  const finalizedRound = matches.filter((match) => match.status === 'finalized' && match.result);
+  const finalizedAll = (matchesRaw || []).filter(
+    (match) => match.status === 'finalized' && match.result
+  );
+  const playerIdsInRound = new Set();
+  for (const team of teams) {
+    for (const playerId of team.players || []) playerIdsInRound.add(playerId);
+  }
+
+  const roundStats = activeRoundId
+    ? aggregatePlayerStatistics({
+        players,
+        statsRows: playerStats.filter((row) => row.roundId === activeRoundId),
+        finalizedMatches: finalizedRound,
+        seedPlayerIds: playerIdsInRound,
+      })
+    : [];
+  const globalStats = aggregatePlayerStatistics({
+    players,
+    statsRows: playerStats,
+    finalizedMatches: finalizedAll,
+  });
+  const matchScores = activeRoundId
+    ? matchScoresForMatches(matches, playerStats, activeRoundId)
+    : {};
+
+  return {
+    players,
+    teams,
+    matches,
+    rounds,
+    meta,
+    player_stats: playerStats,
+    activeRoundId,
+    roundStats,
+    globalStats,
+    matchScores,
+  };
 }
 
 // ---------- Próxima partida ----------

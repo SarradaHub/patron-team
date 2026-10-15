@@ -30,6 +30,108 @@ describe('exportToSupabase', () => {
     invokeMock.mockReset();
     isConfiguredMock.mockReset();
     isConfiguredMock.mockReturnValue(true);
+    sessionStorage.clear();
+  });
+
+  it('reusa o mesmo export id quando o mesmo snapshot falha e é enviado de novo', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: { message: 'Network error' },
+    });
+
+    await expect(exportToSupabase(sampleExport)).rejects.toThrow(/Network error/);
+    await expect(exportToSupabase(sampleExport)).rejects.toThrow(/Network error/);
+
+    const firstId = invokeMock.mock.calls[0][1].body.exportId;
+    const secondId = invokeMock.mock.calls[1][1].body.exportId;
+    expect(secondId).toBe(firstId);
+  });
+
+  it('gera um export id novo para um snapshot diferente', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: { message: 'Network error' },
+    });
+
+    await expect(exportToSupabase(sampleExport)).rejects.toThrow(/Network error/);
+
+    const otherSnapshot = {
+      ...sampleExport,
+      exportedAt: '2026-05-24T18:00:00.000Z',
+    };
+    await expect(exportToSupabase(otherSnapshot)).rejects.toThrow(/Network error/);
+
+    const firstId = invokeMock.mock.calls[0][1].body.exportId;
+    const secondId = invokeMock.mock.calls[1][1].body.exportId;
+    expect(secondId).not.toBe(firstId);
+  });
+
+  it('gera um export id novo depois que o servidor aceita o snapshot', async () => {
+    invokeMock.mockResolvedValue({
+      data: { ok: true, batchId: 'batch-1' },
+      error: null,
+    });
+
+    await exportToSupabase(sampleExport);
+    await exportToSupabase(sampleExport);
+
+    const firstId = invokeMock.mock.calls[0][1].body.exportId;
+    const secondId = invokeMock.mock.calls[1][1].body.exportId;
+    expect(secondId).not.toBe(firstId);
+  });
+
+  it('gera um export id novo depois que o servidor marca duplicata', async () => {
+    invokeMock.mockResolvedValue({
+      data: { ok: true, duplicate: true, batchId: 'existing' },
+      error: null,
+    });
+
+    await exportToSupabase(sampleExport);
+    await exportToSupabase(sampleExport);
+
+    const firstId = invokeMock.mock.calls[0][1].body.exportId;
+    const secondId = invokeMock.mock.calls[1][1].body.exportId;
+    expect(secondId).not.toBe(firstId);
+  });
+
+  it('não envia de novo enquanto um envio está em andamento', async () => {
+    let resolveInvoke;
+    invokeMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInvoke = resolve;
+        })
+    );
+
+    const first = exportToSupabase(sampleExport);
+    const second = exportToSupabase(sampleExport);
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    resolveInvoke({
+      data: { ok: true, batchId: 'batch-1' },
+      error: null,
+    });
+
+    await expect(first).resolves.toMatchObject({ batchId: 'batch-1' });
+    await expect(second).resolves.toMatchObject({ batchId: 'batch-1' });
+  });
+
+  it('mantém o mesmo export id depois de recarregar até o servidor aceitar o snapshot', async () => {
+    invokeMock.mockResolvedValue({
+      data: null,
+      error: { message: 'Network error' },
+    });
+
+    await expect(exportToSupabase(sampleExport)).rejects.toThrow(/Network error/);
+    const firstId = invokeMock.mock.calls[0][1].body.exportId;
+
+    vi.resetModules();
+    const { exportToSupabase: exportAfterReload } = await import('../src/api/cloudExport.js');
+
+    await expect(exportAfterReload(sampleExport)).rejects.toThrow(/Network error/);
+    const secondId = invokeMock.mock.calls[1][1].body.exportId;
+    expect(secondId).toBe(firstId);
   });
 
   it('envia payload com exportId e arrays preservados', async () => {
