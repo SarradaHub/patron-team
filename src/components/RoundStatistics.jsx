@@ -43,6 +43,12 @@ export default function RoundStatistics({ rows }) {
     );
   };
 
+  const applySort = (value) => {
+    const [column, dir] = value.split(':');
+    setSortBy(column);
+    setSortDir(dir);
+  };
+
   const sorted = useMemo(() => {
     const list = [...(rows || [])];
     list.sort((a, b) => {
@@ -75,7 +81,29 @@ export default function RoundStatistics({ rows }) {
         Gols e assistências vêm das <strong>stats por partida</strong> (partidas finalizadas).{' '}
         <strong>GK</strong> conta partidas em que o jogador foi goleiro externo.
       </p>
-      <table className="stats-table">
+      <label className="stats-sort">
+        Ordenar por
+        <select
+          aria-label="Ordenar por"
+          value={`${sortBy}:${sortDir}`}
+          onChange={(e) => applySort(e.target.value)}
+        >
+          {COLUMNS.map((col) =>
+            col.key === 'name' ? (
+              <React.Fragment key={col.key}>
+                <option value={`${col.key}:asc`}>{col.label} (A–Z)</option>
+                <option value={`${col.key}:desc`}>{col.label} (Z–A)</option>
+              </React.Fragment>
+            ) : (
+              <React.Fragment key={col.key}>
+                <option value={`${col.key}:desc`}>{col.label} (maior primeiro)</option>
+                <option value={`${col.key}:asc`}>{col.label} (menor primeiro)</option>
+              </React.Fragment>
+            )
+          )}
+        </select>
+      </label>
+      <table className="stats-table stats-table-cards">
         <thead>
           <tr>
             {COLUMNS.map((col) => (
@@ -92,15 +120,15 @@ export default function RoundStatistics({ rows }) {
         <tbody>
           {sorted.map((row) => (
             <tr key={row.playerId}>
-              <td>{row.name}</td>
-              <td>{row.goals}</td>
-              <td>{row.assists}</td>
-              <td>{row.ownGoals}</td>
-              <td>{row.matches}</td>
-              <td>{row.goalkeeperMatches ?? 0}</td>
-              <td>{row.wins}</td>
-              <td>{row.draws}</td>
-              <td>{row.losses}</td>
+              <td className="stats-name">{row.name}</td>
+              <td data-label="Gols">{row.goals}</td>
+              <td data-label="Ass.">{row.assists}</td>
+              <td data-label="G.C.">{row.ownGoals}</td>
+              <td data-label="Partidas">{row.matches}</td>
+              <td data-label="GK">{row.goalkeeperMatches ?? 0}</td>
+              <td data-label="V">{row.wins}</td>
+              <td data-label="E">{row.draws}</td>
+              <td data-label="D">{row.losses}</td>
             </tr>
           ))}
         </tbody>
