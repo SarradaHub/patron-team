@@ -194,13 +194,13 @@ No issue tracker is configured, so nothing was filed. Category is bug or enhance
 | Back leaves the app; paths are not sections | enhancement | High | Medium | One Back is a dead end |
 | Offline reload drops the controls while the title remains | bug | High | Medium | One reload |
 | Empty name is silent | bug | Medium | Small | 1 wasted click. Resolved: empty Adicionar shows `Informe o nome do jogador.` next to the field. |
-| Lesão / Cansado / Sub do not follow the `substitute` flag | bug | Medium | Medium | One click does more than the Lesão label says |
-| Duplicate Editar / Excluir names | bug | Medium | Small | Hesitation before the first click |
-| Placeholder-only name and filter fields | bug | Medium | Small | No size change required. Add a visible label at the current size |
+| Lesão / Cansado / Sub do not follow the `substitute` flag | bug | Medium | Medium | One click does more than the Lesão label says. Resolved: the queue has Cansado and Sub, not Lesão. Cansado on a field player asks who enters. Sub swaps that queue place and leaves the player available. |
+| Duplicate Editar / Excluir names | bug | Medium | Small | Hesitation before the first click. Resolved: each accessible name includes the player, team, match, or goalkeeper it acts on. The visible words stay Editar and Excluir. |
+| Placeholder-only name and filter fields | bug | Medium | Small | No size change required. Add a visible label at the current size. Resolved: Nome and Filtrar por nome are visible at the input size. Placeholders stay. |
 | 13px checkbox; 34×44 stat buttons; 32px theme toggle | enhancement | Medium | Small | Touch. Do not shrink labels. Resolved: the checkbox row, stat buttons, and theme toggle now have a 44px hit area. Label sizes stay. |
 | Input focus ring under 3:1 | bug | Medium | Small | Keep the 2px thickness. Darken the ring. Resolved: the ring is a solid 2px, `#1a7f37` in light and `#2ea44f` in dark. |
-| Mixed alert / confirm / dialog | enhancement | Medium | Medium | Inconsistent recovery |
-| Zerar and duration save give no toast | enhancement | Low | Small | Zerar still changes the control |
+| Mixed alert / confirm / dialog | enhancement | Medium | Medium | Inconsistent recovery. Resolved: deletes and maintenance use the in-app confirm, with the same sentences. The two alerts are error toasts with the same sentences. |
+| Zerar and duration save give no toast | enhancement | Low | Small | Zerar still changes the control. Resolved: Zerar toasts `Cronômetro zerado.` and Salvar duração toasts `Duração salva.` |
 | Not present: new round, lock, rebalance, bulk, pagination, undo, command palette, session expiry, tiebreaker in this dataset | enhancement | Low | — | Inventory only. Not a defect by itself |
 
 ## 5. Next action

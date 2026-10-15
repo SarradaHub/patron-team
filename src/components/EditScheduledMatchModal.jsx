@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import ModalFrame from './ModalFrame.jsx';
 
 function teamOptionLabel(team, teamLabelById) {
@@ -45,7 +46,7 @@ export default function EditScheduledMatchModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (teamAId === teamBId) {
-      alert('Escolha dois times diferentes.');
+      toast.error('Escolha dois times diferentes.');
       return;
     }
     await onSave(match.id, teamAId, teamBId);

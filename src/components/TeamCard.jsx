@@ -94,6 +94,7 @@ export default function TeamCard({
             type="button"
             className="btn btn-outline btn-sm team-edit-btn"
             onClick={() => onEditTeam(team, label || 'Time')}
+            aria-label={`Editar time ${label || 'Time'}`}
           >
             Editar
           </button>
@@ -103,6 +104,7 @@ export default function TeamCard({
             type="button"
             className="btn btn-outline btn-sm btn-danger-outline"
             onClick={() => onDeleteTeam(team.id)}
+            aria-label={`Excluir time ${label || 'Time'}`}
           >
             Excluir
           </button>

@@ -7,6 +7,8 @@ import {
   getMatches,
   formAllTeamsPossible,
   removePlayer,
+  replaceFieldPlayerWith,
+  swapRosterPlayer,
   restorePlayerToAvailable,
   recordGoal,
   removeGoal,
@@ -60,6 +62,8 @@ import DrawTiebreakerModal from './components/DrawTiebreakerModal.jsx';
 import EditPlayerModal from './components/EditPlayerModal.jsx';
 import EditTeamModal from './components/EditTeamModal.jsx';
 import EditScheduledMatchModal from './components/EditScheduledMatchModal.jsx';
+import SubstitutePicker from './components/SubstitutePicker.jsx';
+import ConfirmDialog from './components/ConfirmDialog.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import MatchCountdownBanner from './components/MatchCountdownBanner.jsx';
 import { isAuthenticated, clearSession } from './auth/auth.js';
@@ -90,6 +94,8 @@ export default function App() {
   const [teamSize, setTeamSize] = useState(5);
   const [drawTiebreakerMatch, setDrawTiebreakerMatch] = useState(null);
   const [editPlayer, setEditPlayer] = useState(null);
+  const [replacementRequest, setReplacementRequest] = useState(null);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
   const [editTeam, setEditTeam] = useState(null);
   const [editTeamDefaultLabel, setEditTeamDefaultLabel] = useState('');
   const [editMatch, setEditMatch] = useState(null);
@@ -428,6 +434,57 @@ export default function App() {
     }
   };
 
+  const replacementCandidates = (player) => {
+    const team = teams.find(
+      (item) =>
+        item.roundId === activeRoundId &&
+        (item.players || []).some((id) => String(id) === String(player.id))
+    );
+    const onTeam = new Set((team?.players || []).map((id) => String(id)));
+    return players.filter(
+      (candidate) =>
+        String(candidate.id) !== String(player.id) &&
+        !candidate.goalkeeperOnly &&
+        candidate.status === 'available' &&
+        !onTeam.has(String(candidate.id))
+    );
+  };
+
+  const handleFieldTired = (player) => {
+    const candidates = replacementCandidates(player);
+    if (candidates.length === 0) {
+      handleRemovePlayer(player.id, 'tired', false);
+      return;
+    }
+    setReplacementRequest({ player, mode: 'tired', candidates });
+  };
+
+  const handleSubstitute = (player) => {
+    setReplacementRequest({
+      player,
+      mode: 'swap',
+      candidates: replacementCandidates(player),
+    });
+  };
+
+  const handleReplacementPick = async (replacement) => {
+    const request = replacementRequest;
+    setReplacementRequest(null);
+    if (!request) return;
+    try {
+      if (request.mode === 'tired') {
+        await replaceFieldPlayerWith(request.player.id, replacement.id, activeRoundId, teamSize);
+        toast.success(`Cansado registrado — ${replacement.name} entrou no lugar.`);
+      } else {
+        await swapRosterPlayer(request.player.id, replacement.id, activeRoundId, teamSize);
+        toast.success(`${request.player.name} voltou para a posição de ${replacement.name} na fila.`);
+      }
+      await refreshData();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   const handleRestorePlayer = async (playerId) => {
     try {
       await restorePlayerToAvailable(playerId);
@@ -530,56 +587,42 @@ export default function App() {
     }
   };
 
-  const handleDeletePlayerPermanent = async (playerId) => {
-    if (
-      !window.confirm(
-        'Excluir este jogador para sempre? Remove de times, stats por partida e não dá para desfazer.'
-      )
-    ) {
-      return;
-    }
-    try {
-      await deletePlayerPermanently(playerId);
-      toast.success('Jogador excluído.');
-      setEditPlayer(null);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
+  const handleDeletePlayerPermanent = (playerId) => {
+    setPendingConfirm({
+      title: 'Excluir jogador',
+      message:
+        'Excluir este jogador para sempre? Remove de times, stats por partida e não dá para desfazer.',
+      run: async () => {
+        await deletePlayerPermanently(playerId);
+        toast.success('Jogador excluído.');
+        setEditPlayer(null);
+        await refreshData();
+      },
+    });
   };
 
-  const handleGoalkeeperPanelDelete = async (player) => {
+  const handleGoalkeeperPanelDelete = (player) => {
     if (player.goalkeeperOnly) {
-      if (
-        !window.confirm(
-          'Excluir este goleiro (cadastro só goleiro)? Não dá para desfazer.'
-        )
-      ) {
-        return;
-      }
-      try {
-        await deletePlayerPermanently(player.id);
-        toast.success('Goleiro excluído.');
+      setPendingConfirm({
+        title: 'Excluir goleiro',
+        message: 'Excluir este goleiro (cadastro só goleiro)? Não dá para desfazer.',
+        run: async () => {
+          await deletePlayerPermanently(player.id);
+          toast.success('Goleiro excluído.');
+          await refreshData();
+        },
+      });
+      return;
+    }
+    setPendingConfirm({
+      title: 'Remover da lista de goleiros',
+      message: 'Remover da lista de goleiros? O jogador continua na fila de linha.',
+      run: async () => {
+        await updatePlayerProfile(player.id, { preferGoalkeeper: false });
+        toast.success('Removido da lista de goleiros.');
         await refreshData();
-      } catch (err) {
-        toast.error(err.message);
-      }
-      return;
-    }
-    if (
-      !window.confirm(
-        'Remover da lista de goleiros? O jogador continua na fila de linha.'
-      )
-    ) {
-      return;
-    }
-    try {
-      await updatePlayerProfile(player.id, { preferGoalkeeper: false });
-      toast.success('Removido da lista de goleiros.');
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
+      },
+    });
   };
 
   const handleDeleteTeam = async (teamId) => {
@@ -592,35 +635,43 @@ export default function App() {
       toast.error(err.message);
       return;
     }
-    if (
-      !window.confirm(
-        'Excluir este time? Jogadores voltam só à fila (cadastro intacto). Não dá para desfazer.'
-      )
-    ) {
-      return;
-    }
-    try {
-      await deleteTeam(teamId);
-      toast.success('Time excluído.');
-      setEditTeam(null);
-      await refreshData();
-    } catch (err) {
-      toast.error(err.message);
-    }
+    setPendingConfirm({
+      title: 'Excluir time',
+      message:
+        'Excluir este time? Jogadores voltam só à fila (cadastro intacto). Não dá para desfazer.',
+      run: async () => {
+        await deleteTeam(teamId);
+        toast.success('Time excluído.');
+        setEditTeam(null);
+        await refreshData();
+      },
+    });
   };
 
-  const handleDeleteMatch = async (matchId, status) => {
+  const handleDeleteMatch = (matchId, status) => {
     const msg =
       status === 'scheduled'
         ? 'Excluir partida agendada e rascunho de stats?'
         : 'Excluir partida finalizada e todas as stats desta partida? Não dá para desfazer.';
-    if (!window.confirm(msg)) return;
+    setPendingConfirm({
+      title: 'Excluir partida',
+      message: msg,
+      run: async () => {
+        await deleteMatch(matchId);
+        toast.success('Partida excluída.');
+        setStatsModalMatch((m) => (m?.id === matchId ? null : m));
+        setEditMatch((m) => (m?.id === matchId ? null : m));
+        await refreshData();
+      },
+    });
+  };
+
+  const runPendingConfirm = async () => {
+    const pending = pendingConfirm;
+    setPendingConfirm(null);
+    if (!pending) return;
     try {
-      await deleteMatch(matchId);
-      toast.success('Partida excluída.');
-      setStatsModalMatch((m) => (m?.id === matchId ? null : m));
-      setEditMatch((m) => (m?.id === matchId ? null : m));
-      await refreshData();
+      await pending.run();
     } catch (err) {
       toast.error(err.message);
     }
@@ -629,6 +680,7 @@ export default function App() {
   const handleSetMatchTimerDuration = async (matchId, minutes) => {
     try {
       await setScheduledMatchTimerDuration(matchId, minutes);
+      toast.success('Duração salva.');
       await refreshData();
     } catch (err) {
       toast.error(err.message);
@@ -648,6 +700,7 @@ export default function App() {
   const handleClearMatchCountdown = async (matchId) => {
     try {
       await clearScheduledMatchCountdown(matchId);
+      toast.success('Cronômetro zerado.');
       await refreshData();
     } catch (err) {
       toast.error(err.message);
@@ -691,6 +744,12 @@ export default function App() {
       toast.error(`Erro ao limpar cache: ${err.message}`);
     }
   };
+
+  const rosterPlayerIds = new Set();
+  for (const team of teams) {
+    if (team.roundId !== activeRoundId) continue;
+    for (const id of team.players || []) rosterPlayerIds.add(id);
+  }
 
   const scheduledInRound = matches.filter(
     (m) => m.status === 'scheduled' && m.roundId === activeRoundId
@@ -842,6 +901,9 @@ export default function App() {
             <QueueList
               players={players.filter((p) => !p.goalkeeperOnly)}
               onRemove={handleRemovePlayer}
+              onFieldTired={handleFieldTired}
+              onSubstitute={handleSubstitute}
+              rosterPlayerIds={rosterPlayerIds}
               onRestore={handleRestorePlayer}
               onEditPlayer={(p) => setEditPlayer(p)}
               onDeletePlayer={handleDeletePlayerPermanent}
@@ -939,6 +1001,31 @@ export default function App() {
           teams={teams}
           onPick={handleTiebreakerPick}
           onCancel={() => setDrawTiebreakerMatch(null)}
+        />
+      )}
+
+      {pendingConfirm && (
+        <ConfirmDialog
+          title={pendingConfirm.title}
+          message={pendingConfirm.message}
+          confirmLabel="Confirmar"
+          cancelLabel="Cancelar"
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={runPendingConfirm}
+        />
+      )}
+
+      {replacementRequest && (
+        <SubstitutePicker
+          title={replacementRequest.mode === 'tired' ? 'Quem entra no lugar?' : 'Substituir'}
+          message={
+            replacementRequest.mode === 'tired'
+              ? `${replacementRequest.player.name} fica cansado. Escolha quem entra.`
+              : `${replacementRequest.player.name} volta para a posição desse jogador na fila.`
+          }
+          candidates={replacementRequest.candidates}
+          onPick={handleReplacementPick}
+          onCancel={() => setReplacementRequest(null)}
         />
       )}
 

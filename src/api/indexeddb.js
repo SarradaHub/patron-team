@@ -1583,7 +1583,8 @@ function applyInjuryOnWaitingTeamRoster({
  * Se não houver time `waiting`, mas houver jogador na fila global fora de elenco, entra esse jogador direto no time em campo (sem cascata na fila de times).
  * Se estiver no elenco de um time `waiting` (jogador ainda `available`), aplica substituição/cascata
  * como na fila de espera após saída em campo; sem substituto ou elenco abaixo do mínimo, dissolve o time.
- * `substitute` mantido por compatibilidade; em campo a substituição é sempre tentada.
+ * `substitute === false` só marca o status e tira o jogador do elenco, sem puxar outro.
+ * `substitute === true` mantém a cascata automática.
  * @param {number} [rosterTargetSize] — alinhado ao “Jogadores por time” da UI (ordem da fila waiting).
  * @returns {Promise<{ substituted: boolean }>}
  */
@@ -1594,7 +1595,6 @@ export async function removePlayer(
   roundId = null,
   rosterTargetSize = 5
 ) {
-  void substitute;
   if (!['injured', 'tired'].includes(reason)) {
     throw new Error("Motivo deve ser 'injured' ou 'tired'.");
   }
@@ -1681,6 +1681,22 @@ export async function removePlayer(
               return;
             }
 
+            if (!substitute) {
+              const team = waitingSortedEarly[kWait];
+              team.players = (team.players || []).filter((pid) => String(pid) !== victimIdStr);
+              vp.status = reason;
+              vp.joinedAt = joinedAtIsoEndOfQueueExcluding(pmap, vp.id);
+              playersStore.put(vp);
+              if ((team.players || []).length < rosterTargetSize) {
+                dissolveWaitingTeamRosterIntoQueue(team, pmap, playersStore);
+                teamsStore.delete(team.id);
+              } else {
+                teamsStore.put(team);
+              }
+              finishNoSub();
+              return;
+            }
+
             try {
               const outcome = applyInjuryOnWaitingTeamRoster({
                 victimIdStr,
@@ -1729,6 +1745,19 @@ export async function removePlayer(
             player.status = reason;
             player.joinedAt = joinedAtIsoEndOfQueueExcluding(playerMap, player.id);
             playersStore.put(player);
+            finishNoSub();
+            return;
+          }
+
+          if (!substitute) {
+            player.status = reason;
+            player.joinedAt = joinedAtIsoEndOfQueueExcluding(playerMap, player.id);
+            playersStore.put(player);
+            const remaining = (fieldTeam.players || []).filter(
+              (pid) => String(pid) !== victimIdStr
+            );
+            if (remaining.length === 0) teamsStore.delete(fieldTeam.id);
+            else teamsStore.put({ ...fieldTeam, players: remaining });
             finishNoSub();
             return;
           }
@@ -1841,6 +1870,152 @@ export async function removePlayer(
     getReq.onerror = () => reject(getReq.error);
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error || new Error('Transação abortada.'));
+  });
+}
+
+function detachFromOtherRosters({
+  teams,
+  playerId,
+  exceptTeamId,
+  roundId,
+  rosterTargetSize,
+  playerMap,
+  playersStore,
+  teamsStore,
+}) {
+  const id = String(playerId);
+  for (const team of teams) {
+    if (team.id === exceptTeamId) continue;
+    if (roundId && team.roundId !== roundId) continue;
+    if (!(team.players || []).some((pid) => String(pid) === id)) continue;
+    team.players = team.players.filter((pid) => String(pid) !== id);
+    if (team.status === 'waiting' && team.players.length < rosterTargetSize) {
+      dissolveWaitingTeamRosterIntoQueue(team, playerMap, playersStore);
+      teamsStore.delete(team.id);
+    } else if (team.players.length === 0) {
+      teamsStore.delete(team.id);
+    } else {
+      teamsStore.put(team);
+    }
+  }
+}
+
+function writeRosterSwap({
+  outgoingId,
+  replacementId,
+  roundId,
+  rosterTargetSize,
+  markOutgoingTired,
+}) {
+  return openDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(['players', 'teams'], 'readwrite');
+        const playersStore = tx.objectStore('players');
+        const teamsStore = tx.objectStore('teams');
+        const fail = (err) => {
+          tx.abort();
+          reject(err);
+        };
+
+        const teamsReq = teamsStore.getAll();
+        teamsReq.onerror = () => fail(teamsReq.error);
+        teamsReq.onsuccess = () => {
+          const playersReq = playersStore.getAll();
+          playersReq.onerror = () => fail(playersReq.error);
+          playersReq.onsuccess = () => {
+            try {
+              const teams = teamsReq.result || [];
+              const allPlayers = playersReq.result || [];
+              const playerMap = Object.fromEntries(allPlayers.map((p) => [String(p.id), p]));
+              const outgoing = playerMap[String(outgoingId)];
+              const replacement = playerMap[String(replacementId)];
+              if (!outgoing || !replacement) throw new Error('Jogador não encontrado.');
+              if (String(outgoingId) === String(replacementId)) {
+                throw new Error('Escolha outro jogador.');
+              }
+              if (!canFillWaitingFromBench(replacement)) {
+                throw new Error('O jogador escolhido não está disponível.');
+              }
+
+              const destination = teams.find(
+                (team) =>
+                  (!roundId || team.roundId === roundId) &&
+                  (team.players || []).some((pid) => String(pid) === String(outgoingId))
+              );
+              if (!destination) throw new Error('Jogador não está em um time.');
+              if (markOutgoingTired && destination.status !== 'in_field') {
+                throw new Error('Só um jogador em campo escolhe quem entra.');
+              }
+              if ((destination.players || []).some((pid) => String(pid) === String(replacementId))) {
+                throw new Error('Esse jogador já está neste time.');
+              }
+
+              if (!markOutgoingTired) {
+                const outgoingJoinedAt = outgoing.joinedAt;
+                outgoing.joinedAt = replacement.joinedAt;
+                replacement.joinedAt = outgoingJoinedAt;
+              } else {
+                outgoing.joinedAt = joinedAtIsoEndOfQueueExcluding(playerMap, outgoing.id);
+                outgoing.status = 'tired';
+              }
+
+              detachFromOtherRosters({
+                teams,
+                playerId: replacementId,
+                exceptTeamId: destination.id,
+                roundId,
+                rosterTargetSize,
+                playerMap,
+                playersStore,
+                teamsStore,
+              });
+
+              destination.players = (destination.players || []).map((pid) =>
+                String(pid) === String(outgoingId) ? replacementId : pid
+              );
+              teamsStore.put(destination);
+
+              if (destination.status === 'in_field') replacement.status = 'in_field';
+              if (!markOutgoingTired) outgoing.status = 'available';
+
+              playersStore.put(outgoing);
+              playersStore.put(replacement);
+
+              tx.oncomplete = () => {
+                notifyChange('player_removed');
+                resolve();
+              };
+            } catch (err) {
+              fail(err);
+            }
+          };
+        };
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error('Transação abortada.'));
+      })
+  );
+}
+
+/** Cansado em campo: o escolhido ocupa a vaga. O cansado não herda a posição dele na fila. */
+export function replaceFieldPlayerWith(outgoingId, replacementId, roundId, rosterTargetSize = 5) {
+  return writeRosterSwap({
+    outgoingId,
+    replacementId,
+    roundId,
+    rosterTargetSize,
+    markOutgoingTired: true,
+  });
+}
+
+/** Sub de escalação errada: troca a vaga e a posição na fila. Quem sai continua disponível. */
+export function swapRosterPlayer(outgoingId, replacementId, roundId, rosterTargetSize = 5) {
+  return writeRosterSwap({
+    outgoingId,
+    replacementId,
+    roundId,
+    rosterTargetSize,
+    markOutgoingTired: false,
   });
 }
 

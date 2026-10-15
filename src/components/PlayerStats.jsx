@@ -140,7 +140,11 @@ export default function PlayerStats({
         <h2>Estatísticas de jogadores</h2>
 
         <div className="stats-filter">
+          <label className="field-label" htmlFor="global-player-filter">
+            Filtrar por nome
+          </label>
           <input
+            id="global-player-filter"
             type="text"
             className="input-text"
             placeholder="Filtrar por nome..."
